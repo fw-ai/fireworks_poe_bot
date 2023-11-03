@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fireworks-poe-bot"
+version = "0.0.1"
+description = "Infrastructure for building poe.com bots based off of fireworks.ai hosted models"
+authors = [{ name = "James Reed", email = "james@fireworks.ai" }]
+readme = "README.md"
+keywords = ["poe", "bot", "fastapi"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "fastapi_poe>=0.0.19",
+    "sse-starlette>=1.0.0",
+    "fireworks-ai>=0.6.0",
+    "uvicorn>=0.23.2",
+    "typing_extensions>=4.0.0",
+]
+
+[project.scripts]
+fireworks_poe_bot = "fireworks_poe_bot.__main__:main"
