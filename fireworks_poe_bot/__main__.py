@@ -10,8 +10,6 @@ import uvicorn
 
 @dataclass
 class ServerArgs:
-    fireworks_api_key: str = ""
-    fireworks_api_base_url: str = ""
     host: str = "0.0.0.0"
     port: int = 80
     model: str = ""
@@ -33,8 +31,6 @@ def main():
     server_group = parser.add_argument_group("server", "Server arguments")
     server_group.add_argument("--host", type=str, default=server_args.host)
     server_group.add_argument("-p", "--port", type=int, default=server_args.port)
-    server_group.add_argument("-f", "--fireworks-api-key", type=str, default="")
-    server_group.add_argument("-u", "--fireworks-api-base-url", type=str, default="")
     server_group.add_argument("-m", "--model", type=str, default=server_args.model)
     server_group.add_argument(
         "-e", "--environment", type=str, default=server_args.environment
@@ -52,10 +48,6 @@ def main():
                 break
         else:
             assert k in ["print_supported_models"], f"Unknown argument {k}"
-
-    fireworks.client.api_key = server_args.fireworks_api_key
-    if server_args.fireworks_api_base_url:
-        fireworks.client.base_url = server_args.fireworks_api_base_url
 
     bot = FireworksPoeServerBot(args.model, args.environment, "0.0.1")
     app = make_app(bot, allow_without_key=True)

@@ -9,8 +9,6 @@ import os
 from modal import Image, Stub, asgi_app
 
 
-fireworks.client.api_key = os.environ["FW_ACCESS_KEY"]
-
 bot = FireworksPoeServerBot(os.environ["MODEL"], "", "0.0.1")
 
 image = (
@@ -19,7 +17,8 @@ image = (
     .pip_install("fireworks-ai>=0.6.0")
     .env(
         {
-            "FW_ACCESS_KEY": os.environ["FW_ACCESS_KEY"],
+            "FIREWORKS_API_BASE": os.environ.get("FIREWORKS_API_BASE", None),
+            "FIREWORKS_API_KEY": os.environ.get("FIREWORKS_API_KEY", None),
             "MODEL": os.environ["MODEL"],
         }
     )
