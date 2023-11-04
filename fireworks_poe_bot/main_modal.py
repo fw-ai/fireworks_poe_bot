@@ -17,8 +17,12 @@ image = (
     .pip_install("fireworks-ai>=0.6.0")
     .env(
         {
-            "FIREWORKS_API_BASE": os.environ.get("FIREWORKS_API_BASE", None),
-            "FIREWORKS_API_KEY": os.environ.get("FIREWORKS_API_KEY", None),
+            "FIREWORKS_API_BASE": os.environ.get(
+                "FIREWORKS_API_BASE", fireworks.client.base_url
+            ),
+            "FIREWORKS_API_KEY": os.environ.get(
+                "FIREWORKS_API_KEY", fireworks.client.api_key
+            ),
             "MODEL": os.environ["MODEL"],
         }
     )
