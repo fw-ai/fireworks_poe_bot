@@ -24,6 +24,8 @@ import os
 import io
 import base64
 import httpx
+from PIL import Image
+import math
 
 
 async def download_image_and_encode_to_base64(
@@ -34,9 +36,24 @@ async def download_image_and_encode_to_base64(
         r = await client.get(url)
         image_download_end = time.perf_counter()
         if r.status_code == 200:
+            img_buffer = r.content
+            img_resize_factor = 1
             encode_start = time.perf_counter()
+            if len(r.content) / 1024 / 1024 > 1.5:
+                # if the image is bigger than 1.5 MB, then we downsize the image
+                # downscale so that the image size is smaller than 1.5 MB
+                img_resize_factor = math.ceil(
+                    math.sqrt(len(r.content) / 1024 / 1024 / 1.5)
+                )
+                pil_img = Image.open(io.BytesIO(r.content))
+                pil_img_resized = pil_img.resize(
+                    (x // img_resize_factor for x in pil_img.size)
+                )
+                buffered = io.BytesIO()
+                pil_img_resized.save(buffered, format="JPEG")
+                img_buffer = buffered.getvalue()
             img = "data:image/jpeg;base64,{}".format(
-                base64.b64encode(r.content).decode("utf-8")
+                base64.b64encode(img_buffer).decode("utf-8")
             )
             encode_end = time.perf_counter()
             return img, {
@@ -44,6 +61,7 @@ async def download_image_and_encode_to_base64(
                     (image_download_end - image_download_start) * 1000
                 ),
                 "encode_image_ms": int((encode_end - encode_start) * 1000),
+                "image_resize_factor": img_resize_factor,
                 "url": url,
             }
         raise Exception(f"Unable to download image, error code {r.status_code}")
@@ -64,6 +82,8 @@ class FireworksPoeServerBot(PoeBot):
         self.server_version = server_version
         self.completion_async_method = completion_async_method
         self.allow_attachments = allow_attachments
+        logging_level = getattr(logging, os.environ.get("LOGGING_LEVEL", "INFO"))
+        logging.basicConfig(level=logging_level)
 
     def _log_warn(self, payload: Dict):
         payload = copy.copy(payload)
@@ -99,6 +119,7 @@ class FireworksPoeServerBot(PoeBot):
         messages: List[ChatMessage] = []
 
         redacted_msgs = []
+        cumulative_image_size_mb = 0
         for protocol_message in query.query:
             # Redacted message for logging
             log_msg = copy.copy(protocol_message.dict())
@@ -135,6 +156,11 @@ class FireworksPoeServerBot(PoeBot):
                         yield ErrorResponse(allow_retry=False, text=str(e))
 
             if img_base64:
+                if cumulative_image_size_mb > 8:
+                    # Apigee has a limit of 10MB for payload, we set image total limit to 8MB
+                    yield ErrorResponse(
+                        allow_retry=False, text="The total image size is too big"
+                    )
                 messages.append(
                     {
                         "role": role,
@@ -147,6 +173,7 @@ class FireworksPoeServerBot(PoeBot):
                         ],
                     }
                 )
+                cumulative_image_size_mb += len(img_base64) / 1024 / 1024
             else:
                 messages.append({"role": role, "content": protocol_message.content})
 
@@ -156,7 +183,6 @@ class FireworksPoeServerBot(PoeBot):
                     **log_msg,
                 }
             )
-
         # The poe servers send us arbitrary lists of messages. We need to do a few things
         # to normalize for our chat completion API:
         # 1. Ensure that all assistant messages are preceded by a user message
