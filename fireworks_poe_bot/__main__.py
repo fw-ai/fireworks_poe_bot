@@ -15,6 +15,7 @@ class ServerArgs:
     host: str = "0.0.0.0"
     port: int = 80
     model: str = ""
+    allow_attachments: bool = False
     environment: str = ""
 
 
@@ -36,6 +37,7 @@ def main():
     server_group.add_argument("-m", "--model", type=str, default=server_args.model)
     server_group.add_argument("-f", "--fireworks-api-key", type=str, default="")
     server_group.add_argument("-u", "--fireworks-api-base-url", type=str, default="")
+    server_group.add_argument("-a", "--allow-attachments", type=bool, default=False)
     server_group.add_argument(
         "-e", "--environment", type=str, default=server_args.environment
     )
@@ -56,7 +58,7 @@ def main():
     if server_args.fireworks_api_base_url:
         fireworks.client.base_url = server_args.fireworks_api_base_url
 
-    bot = FireworksPoeServerBot(args.model, args.environment, "0.0.1")
+    bot = FireworksPoeServerBot(args.model, args.environment, "0.0.1", args.allow_attachments)
     app = make_app(bot, allow_without_key=True)
 
     uvicorn.run(

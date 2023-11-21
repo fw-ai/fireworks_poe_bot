@@ -10,8 +10,7 @@ RUN pip3 install --upgrade pip
 # Install the required Python packages
 RUN pip3 install fastapi-poe==0.0.23 \
     'fireworks-ai>=0.8.0' \
-    boto3 \
-    requests
+    boto3
 
 WORKDIR /app
 

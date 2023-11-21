@@ -1,2 +1,1 @@
-docker build --platform linux/amd64 -t us-docker.pkg.dev/fw-ai-cp-prod/inference/fireworks-text-completion-poe-bot:latest -f ./Dockerfile .
-docker push us-docker.pkg.dev/fw-ai-cp-prod/inference/fireworks-text-completion-poe-bot:latest
+docker build --platform linux/amd64 -t text-completion-poe-bot:latest -f ./Dockerfile .
