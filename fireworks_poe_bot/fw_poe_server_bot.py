@@ -1,5 +1,5 @@
 import copy
-from typing import AsyncIterable, Dict, List, Union
+from typing import AsyncIterable, Dict, List, Union, Any
 from fastapi_poe import PoeBot
 from sse_starlette.sse import ServerSentEvent
 from fastapi_poe.types import (
@@ -21,6 +21,19 @@ from itertools import groupby
 import logging
 import time
 import os
+import io
+import base64
+import requests
+
+
+def download_image_and_encode_to_base64(url: str) -> str:
+    r = requests.get(url, stream=True)
+    if r.status_code == 200:
+        img = "data:image/jpeg;base64,{}".format(
+            base64.b64encode(r.content).decode("utf-8")
+        )
+        return img
+    raise Exception(f"Unable to download image, error code {r.status_code}")
 
 
 class FireworksPoeServerBot(PoeBot):
@@ -87,11 +100,37 @@ class FireworksPoeServerBot(PoeBot):
                 continue
             # TODO: support protocol_message.feedback and protocol_message.attachments
             # if needed
+            img_base64 = None
             if protocol_message.role == "bot":
                 role = "assistant"
             else:
                 role = protocol_message.role
-            messages.append({"role": role, "content": protocol_message.content})
+                if (
+                    protocol_message.attachments
+                    and protocol_message.attachments[0].content_type in ["image/png", "image/jpeg"]
+                ):
+                    try:
+                        img_base64 = download_image_and_encode_to_base64(
+                            protocol_message.attachments[0].url
+                        )
+                    except Exception as e:
+                        yield ErrorResponse(allow_retry=False, text=str(e))
+
+            if img_base64:
+                messages.append(
+                    {
+                        "role": role,
+                        "content": [
+                            {"type": "text", "text": protocol_message.content},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": img_base64},
+                            },
+                        ],
+                    }
+                )
+            else:
+                messages.append({"role": role, "content": protocol_message.content})
 
             self._log_info(
                 {
@@ -121,8 +160,25 @@ class FireworksPoeServerBot(PoeBot):
         # Merge adjacent messages from the same role
         merged_messages = []
 
+        
+        # Now there could be images in the messages, in which case the message content is a list
+        def merge_messages_groups(message_group: List[Union[str, List[Dict[str, Any]]]]) -> Union[str, List[Dict[str, Any]]]:
+            text = []
+            images = []
+            for msg in message_group:
+                if isinstance(msg, str):
+                    text.append(msg)
+                elif isinstance(msg, list):
+                    assert msg[0]['type'] == "text"
+                    text.append(msg[0]['text'])
+                    images.extend(msg[1:])
+            if images:
+                return [{"type": "text", "text": " ".join(text)}, *images]
+            return " ".join(text)
+                    
+            
         for role, group in groupby(messages, key=lambda x: x["role"]):
-            content = " ".join(message["content"] for message in group)
+            content = merge_messages_groups([message["content"] for message in group])
             merged_messages.append({"role": role, "content": content})
 
         messages = merged_messages
@@ -193,7 +249,8 @@ class FireworksPoeServerBot(PoeBot):
             return
 
     async def get_settings(self, setting: SettingsRequest) -> SettingsResponse:
-        """Override this to return non-standard settings."""
+        if "llava" in self.model:
+            return SettingsResponse(allow_attachments=True)
         return SettingsResponse()
 
     async def on_feedback(self, feedback_request: ReportFeedbackRequest) -> None:
