@@ -1,6 +1,6 @@
 from fireworks_poe_bot.fw_poe_server_bot import FireworksPoeServerBot
+from fireworks_poe_bot.logging import UVICORN_LOGGING_CONFIG
 
-import fireworks.client
 
 import argparse
 from dataclasses import dataclass
@@ -10,8 +10,6 @@ import uvicorn
 
 @dataclass
 class ServerArgs:
-    fireworks_api_key: str = ""
-    fireworks_api_base_url: str = ""
     host: str = "0.0.0.0"
     port: int = 80
     model: str = ""
@@ -35,8 +33,6 @@ def main():
     server_group.add_argument("--host", type=str, default=server_args.host)
     server_group.add_argument("-p", "--port", type=int, default=server_args.port)
     server_group.add_argument("-m", "--model", type=str, default=server_args.model)
-    server_group.add_argument("-f", "--fireworks-api-key", type=str, default="")
-    server_group.add_argument("-u", "--fireworks-api-base-url", type=str, default="")
     server_group.add_argument("-a", "--allow-attachments", action="store_true")
     server_group.add_argument(
         "-e", "--environment", type=str, default=server_args.environment
@@ -54,10 +50,6 @@ def main():
         else:
             assert k in ["print_supported_models"], f"Unknown argument {k}"
 
-    fireworks.client.api_key = server_args.fireworks_api_key
-    if server_args.fireworks_api_base_url:
-        fireworks.client.base_url = server_args.fireworks_api_base_url
-
     bot = FireworksPoeServerBot(
         model=args.model,
         environment=args.environment,
@@ -72,6 +64,7 @@ def main():
         port=server_args.port,
         log_level="info",
         server_header=False,
+        log_config=UVICORN_LOGGING_CONFIG,
     )
 
 

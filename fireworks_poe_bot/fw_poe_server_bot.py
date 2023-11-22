@@ -1,5 +1,5 @@
 import copy
-from typing import AsyncIterable, Dict, List, Union, Any, Tuple
+from typing import AsyncIterable, Dict, List, Union, Any
 from fastapi_poe import PoeBot
 from sse_starlette.sse import ServerSentEvent
 from fastapi_poe.types import (
@@ -20,51 +20,10 @@ from typing import Callable
 from itertools import groupby
 import logging
 import time
-import os
 import io
 import base64
 import httpx
 from PIL import Image
-import math
-
-
-async def download_image_and_encode_to_base64(
-    url: str,
-) -> Tuple[str, Dict[str, Union[int, str]]]:
-    async with httpx.AsyncClient() as client:
-        image_download_start = time.perf_counter()
-        r = await client.get(url)
-        image_download_end = time.perf_counter()
-        if r.status_code == 200:
-            img_buffer = r.content
-            img_resize_factor = 1
-            encode_start = time.perf_counter()
-            if len(r.content) / 1024 / 1024 > 1.5:
-                # if the image is bigger than 1.5 MB, then we downsize the image
-                # downscale so that the image size is smaller than 1.5 MB
-                img_resize_factor = math.ceil(
-                    math.sqrt(len(r.content) / 1024 / 1024 / 1.5)
-                )
-                pil_img = Image.open(io.BytesIO(r.content))
-                pil_img_resized = pil_img.resize(
-                    (x // img_resize_factor for x in pil_img.size)
-                )
-                buffered = io.BytesIO()
-                pil_img_resized.save(buffered, format="JPEG")
-                img_buffer = buffered.getvalue()
-            img = "data:image/jpeg;base64,{}".format(
-                base64.b64encode(img_buffer).decode("utf-8")
-            )
-            encode_end = time.perf_counter()
-            return img, {
-                "download_image_ms": int(
-                    (image_download_end - image_download_start) * 1000
-                ),
-                "encode_image_ms": int((encode_end - encode_start) * 1000),
-                "image_resize_factor": img_resize_factor,
-                "url": url,
-            }
-        raise Exception(f"Unable to download image, error code {r.status_code}")
 
 
 class FireworksPoeServerBot(PoeBot):
@@ -82,8 +41,6 @@ class FireworksPoeServerBot(PoeBot):
         self.server_version = server_version
         self.completion_async_method = completion_async_method
         self.allow_attachments = allow_attachments
-        logging_level = getattr(logging, os.environ.get("LOGGING_LEVEL", "INFO"))
-        logging.basicConfig(level=logging_level)
 
     def _log_warn(self, payload: Dict):
         payload = copy.copy(payload)
@@ -108,6 +65,44 @@ class FireworksPoeServerBot(PoeBot):
             }
         )
         logging.info(payload)
+
+    async def download_image_and_encode_to_base64(
+        self,
+        url: str,
+    ) -> str:
+        async with httpx.AsyncClient() as client:
+            image_download_start = time.perf_counter()
+            r = await client.get(url)
+            image_download_end = time.perf_counter()
+            if r.status_code == 200:
+                resize_encode_start = time.perf_counter()
+                pil_img = Image.open(io.BytesIO(r.content))
+                width, height = pil_img.size
+                if width >= height:
+                    new_size = (336, int(height * 336 / width))
+                else:
+                    new_size = (int(width * 336 / height), 336)
+                pil_img_resized = pil_img.resize(new_size)
+                buffered = io.BytesIO()
+                pil_img_resized.save(buffered, format="JPEG")
+                img_buffer = buffered.getvalue()
+                img = "data:image/jpeg;base64,{}".format(
+                    base64.b64encode(img_buffer).decode("utf-8")
+                )
+                resize_encode_end = time.perf_counter()
+                self._log_info(
+                    {
+                        "download_image_ms": int(
+                            (image_download_end - image_download_start) * 1000
+                        ),
+                        "encode_image_ms": int(
+                            (resize_encode_end - resize_encode_start) * 1000
+                        ),
+                        "url": url,
+                    }
+                )
+                return img
+            raise Exception(f"Unable to download image, error code {r.status_code}")
 
     async def get_response(
         self, query: QueryRequest
@@ -145,13 +140,9 @@ class FireworksPoeServerBot(PoeBot):
                     0
                 ].content_type in ["image/png", "image/jpeg"]:
                     try:
-                        (
-                            img_base64,
-                            logging_payload,
-                        ) = await download_image_and_encode_to_base64(
+                        img_base64 = await self.download_image_and_encode_to_base64(
                             protocol_message.attachments[0].url
                         )
-                        self._log_info(logging_payload)
                     except Exception as e:
                         yield ErrorResponse(allow_retry=False, text=str(e))
 
