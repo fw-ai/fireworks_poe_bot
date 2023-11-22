@@ -1,5 +1,5 @@
 import copy
-from typing import AsyncIterable, Dict, List, Union
+from typing import AsyncIterable, Dict, List, Union, Any
 from fastapi_poe import PoeBot
 from sse_starlette.sse import ServerSentEvent
 from fastapi_poe.types import (
@@ -20,7 +20,10 @@ from typing import Callable
 from itertools import groupby
 import logging
 import time
-import os
+import io
+import base64
+import httpx
+from PIL import Image
 
 
 class FireworksPoeServerBot(PoeBot):
@@ -29,13 +32,17 @@ class FireworksPoeServerBot(PoeBot):
         model: str,
         environment: str,
         server_version: str,
+        image_size: int,
         completion_async_method: Callable = ChatCompletion.acreate,
+        allow_attachments: bool = False,
     ):
         super().__init__()
         self.model = model
         self.environment = environment
         self.server_version = server_version
+        self.image_size = image_size
         self.completion_async_method = completion_async_method
+        self.allow_attachments = allow_attachments
 
     def _log_warn(self, payload: Dict):
         payload = copy.copy(payload)
@@ -61,6 +68,44 @@ class FireworksPoeServerBot(PoeBot):
         )
         logging.info(payload)
 
+    async def download_image_and_encode_to_base64(
+        self,
+        url: str,
+    ) -> str:
+        async with httpx.AsyncClient() as client:
+            image_download_start = time.perf_counter()
+            r = await client.get(url)
+            image_download_end = time.perf_counter()
+            if r.status_code == 200:
+                resize_encode_start = time.perf_counter()
+                pil_img = Image.open(io.BytesIO(r.content))
+                width, height = pil_img.size
+                if width >= height:
+                    new_size = (self.image_size, int(height * self.image_size / width))
+                else:
+                    new_size = (int(width * self.image_size / height), self.image_size)
+                pil_img_resized = pil_img.resize(new_size)
+                buffered = io.BytesIO()
+                pil_img_resized.save(buffered, format="JPEG")
+                img_buffer = buffered.getvalue()
+                img = "data:image/jpeg;base64,{}".format(
+                    base64.b64encode(img_buffer).decode("utf-8")
+                )
+                resize_encode_end = time.perf_counter()
+                self._log_info(
+                    {
+                        "download_image_ms": int(
+                            (image_download_end - image_download_start) * 1000
+                        ),
+                        "encode_image_ms": int(
+                            (resize_encode_end - resize_encode_start) * 1000
+                        ),
+                        "url": url,
+                    }
+                )
+                return img
+            raise Exception(f"Unable to download image, error code {r.status_code}")
+
     async def get_response(
         self, query: QueryRequest
     ) -> AsyncIterable[Union[PartialResponse, ServerSentEvent]]:
@@ -71,6 +116,7 @@ class FireworksPoeServerBot(PoeBot):
         messages: List[ChatMessage] = []
 
         redacted_msgs = []
+        cumulative_image_size_mb = 0
         for protocol_message in query.query:
             # Redacted message for logging
             log_msg = copy.copy(protocol_message.dict())
@@ -87,11 +133,42 @@ class FireworksPoeServerBot(PoeBot):
                 continue
             # TODO: support protocol_message.feedback and protocol_message.attachments
             # if needed
+            img_base64 = None
             if protocol_message.role == "bot":
                 role = "assistant"
             else:
                 role = protocol_message.role
-            messages.append({"role": role, "content": protocol_message.content})
+                if protocol_message.attachments and protocol_message.attachments[
+                    0
+                ].content_type in ["image/png", "image/jpeg"]:
+                    try:
+                        img_base64 = await self.download_image_and_encode_to_base64(
+                            protocol_message.attachments[0].url
+                        )
+                    except Exception as e:
+                        yield ErrorResponse(allow_retry=False, text=str(e))
+
+            if img_base64:
+                if cumulative_image_size_mb > 8:
+                    # Apigee has a limit of 10MB for payload, we set image total limit to 8MB
+                    yield ErrorResponse(
+                        allow_retry=False, text="The total image size is too big"
+                    )
+                messages.append(
+                    {
+                        "role": role,
+                        "content": [
+                            {"type": "text", "text": protocol_message.content},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": img_base64},
+                            },
+                        ],
+                    }
+                )
+                cumulative_image_size_mb += len(img_base64) / 1024 / 1024
+            else:
+                messages.append({"role": role, "content": protocol_message.content})
 
             self._log_info(
                 {
@@ -99,7 +176,6 @@ class FireworksPoeServerBot(PoeBot):
                     **log_msg,
                 }
             )
-
         # The poe servers send us arbitrary lists of messages. We need to do a few things
         # to normalize for our chat completion API:
         # 1. Ensure that all assistant messages are preceded by a user message
@@ -121,8 +197,25 @@ class FireworksPoeServerBot(PoeBot):
         # Merge adjacent messages from the same role
         merged_messages = []
 
+        # Now there could be images in the messages, in which case the message content is a list
+        def merge_messages_groups(
+            message_group: List[Union[str, List[Dict[str, Any]]]]
+        ) -> Union[str, List[Dict[str, Any]]]:
+            text = []
+            images = []
+            for msg in message_group:
+                if isinstance(msg, str):
+                    text.append(msg)
+                elif isinstance(msg, list):
+                    assert msg[0]["type"] == "text"
+                    text.append(msg[0]["text"])
+                    images.extend(msg[1:])
+            if images:
+                return [{"type": "text", "text": " ".join(text)}, *images]
+            return " ".join(text)
+
         for role, group in groupby(messages, key=lambda x: x["role"]):
-            content = " ".join(message["content"] for message in group)
+            content = merge_messages_groups([message["content"] for message in group])
             merged_messages.append({"role": role, "content": content})
 
         messages = merged_messages
@@ -193,8 +286,7 @@ class FireworksPoeServerBot(PoeBot):
             return
 
     async def get_settings(self, setting: SettingsRequest) -> SettingsResponse:
-        """Override this to return non-standard settings."""
-        return SettingsResponse()
+        return SettingsResponse(allow_attachments=self.allow_attachments)
 
     async def on_feedback(self, feedback_request: ReportFeedbackRequest) -> None:
         """Override this to record feedback from the user."""
