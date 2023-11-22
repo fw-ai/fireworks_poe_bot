@@ -13,6 +13,7 @@ class ServerArgs:
     host: str = "0.0.0.0"
     port: int = 80
     model: str = ""
+    image_size: int = 336
     allow_attachments: bool = False
     environment: str = ""
 
@@ -33,6 +34,9 @@ def main():
     server_group.add_argument("--host", type=str, default=server_args.host)
     server_group.add_argument("-p", "--port", type=int, default=server_args.port)
     server_group.add_argument("-m", "--model", type=str, default=server_args.model)
+    server_group.add_argument(
+        "-s", "--image-size", type=int, default=server_args.image_size
+    )
     server_group.add_argument("-a", "--allow-attachments", action="store_true")
     server_group.add_argument(
         "-e", "--environment", type=str, default=server_args.environment
@@ -54,6 +58,7 @@ def main():
         model=args.model,
         environment=args.environment,
         server_version="0.0.1",
+        image_size=args.image_size,
         allow_attachments=args.allow_attachments,
     )
     app = make_app(bot, allow_without_key=True)

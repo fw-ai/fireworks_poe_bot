@@ -32,6 +32,7 @@ class FireworksPoeServerBot(PoeBot):
         model: str,
         environment: str,
         server_version: str,
+        image_size: int,
         completion_async_method: Callable = ChatCompletion.acreate,
         allow_attachments: bool = False,
     ):
@@ -39,6 +40,7 @@ class FireworksPoeServerBot(PoeBot):
         self.model = model
         self.environment = environment
         self.server_version = server_version
+        self.image_size = image_size
         self.completion_async_method = completion_async_method
         self.allow_attachments = allow_attachments
 
@@ -79,9 +81,9 @@ class FireworksPoeServerBot(PoeBot):
                 pil_img = Image.open(io.BytesIO(r.content))
                 width, height = pil_img.size
                 if width >= height:
-                    new_size = (336, int(height * 336 / width))
+                    new_size = (self.image_size, int(height * self.image_size / width))
                 else:
-                    new_size = (int(width * 336 / height), 336)
+                    new_size = (int(width * self.image_size / height), self.image_size)
                 pil_img_resized = pil_img.resize(new_size)
                 buffered = io.BytesIO()
                 pil_img_resized.save(buffered, format="JPEG")
