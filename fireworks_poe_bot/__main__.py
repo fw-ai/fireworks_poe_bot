@@ -1,6 +1,6 @@
 from fireworks_poe_bot.fw_poe_server_bot import FireworksPoeServerBot
+from fireworks_poe_bot.logging import UVICORN_LOGGING_CONFIG
 
-import fireworks.client
 
 import argparse
 from dataclasses import dataclass
@@ -13,6 +13,8 @@ class ServerArgs:
     host: str = "0.0.0.0"
     port: int = 80
     model: str = ""
+    image_size: int = 336
+    allow_attachments: bool = False
     environment: str = ""
 
 
@@ -33,11 +35,14 @@ def main():
     server_group.add_argument("-p", "--port", type=int, default=server_args.port)
     server_group.add_argument("-m", "--model", type=str, default=server_args.model)
     server_group.add_argument(
+        "-s", "--image-size", type=int, default=server_args.image_size
+    )
+    server_group.add_argument("-a", "--allow-attachments", action="store_true")
+    server_group.add_argument(
         "-e", "--environment", type=str, default=server_args.environment
     )
 
     args = parser.parse_args()
-
     assert args.model, "Model must be specified"
 
     # Parse arguments.
@@ -49,7 +54,13 @@ def main():
         else:
             assert k in ["print_supported_models"], f"Unknown argument {k}"
 
-    bot = FireworksPoeServerBot(args.model, args.environment, "0.0.1")
+    bot = FireworksPoeServerBot(
+        model=args.model,
+        environment=args.environment,
+        server_version="0.0.1",
+        image_size=args.image_size,
+        allow_attachments=args.allow_attachments,
+    )
     app = make_app(bot, allow_without_key=True)
 
     uvicorn.run(
@@ -58,6 +69,7 @@ def main():
         port=server_args.port,
         log_level="info",
         server_header=False,
+        log_config=UVICORN_LOGGING_CONFIG,
     )
 
 
