@@ -17,11 +17,18 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "fastapi_poe>=0.0.19",
+    "fastapi",
+    "httpx",
+    "httpx-sse",
+    "pydantic>2",
     "sse-starlette>=1.0.0",
     "fireworks-ai>=0.6.0",
     "uvicorn>=0.23.2",
     "typing_extensions>=4.0.0",
+    "opencv-python",
+    "numpy",
+    "google-cloud-storage",
+    "qrcode",
 ]
 
 [project.scripts]
