@@ -28,6 +28,7 @@ dependencies = [
     "opencv-python",
     "numpy",
     "google-cloud-storage",
+    "qrcode",
 ]
 
 [project.scripts]

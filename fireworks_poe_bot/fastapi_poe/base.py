@@ -270,6 +270,7 @@ def make_app(
     )
 
     def find_bot(account: str, model: str) -> PoeBot:
+        print("!!!! find bot", account, model, bots.keys())
         bot_fqn = f"accounts/{account}/models/{model}"
         if bot_fqn not in bots:
             raise HTTPException(status_code=404, detail=f"Bot {bot_fqn} not found")
