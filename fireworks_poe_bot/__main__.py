@@ -1,6 +1,7 @@
 from fireworks_poe_bot.fw_poe_text_bot import FireworksPoeTextBot
 from fireworks_poe_bot.fw_poe_image_bot import FireworksPoeImageBot
 from fireworks_poe_bot.logging import UVICORN_LOGGING_CONFIG
+from fireworks_poe_bot.config import Config, load_config
 
 
 import argparse
@@ -14,8 +15,7 @@ import os
 class ServerArgs:
     host: str = "0.0.0.0"
     port: int = 80
-    text_models: str = ""
-    image_models: str = ""
+    config_file_path: str = "config.json"
     image_size: int = 336
     allow_attachments: bool = False
     environment: str = ""
@@ -37,10 +37,7 @@ def main():
     server_group.add_argument("--host", type=str, default=server_args.host)
     server_group.add_argument("-p", "--port", type=int, default=server_args.port)
     server_group.add_argument(
-        "-t", "--text-models", type=str, default=server_args.text_models
-    )
-    server_group.add_argument(
-        "-i", "--image-models", type=str, default=server_args.image_models
+        "-c", "--config-file-path", type=str, default=server_args.config_file_path
     )
     server_group.add_argument(
         "-s", "--image-size", type=int, default=server_args.image_size
@@ -61,20 +58,26 @@ def main():
         else:
             assert k in ["print_supported_models"], f"Unknown argument {k}"
 
+    config = load_config(args.config_file_path)
+
     bots = {}
 
-    for model_fqn in filter(lambda s: s != "", args.text_models.split(",")):
+    for text_model_spec in config.text_models:
+        model_fqn, api_key = text_model_spec.model, text_model_spec.API_KEY
         bots[model_fqn] = FireworksPoeTextBot(
             model=model_fqn,
+            api_key=api_key,
             environment=args.environment,
             server_version="0.0.1",
             image_size=args.image_size,
             allow_attachments=args.allow_attachments,
         )
 
-    for model_fqn in filter(lambda s: s != "", args.image_models.split(",")):
+    for image_model_spec in config.image_models:
+        model_fqn, api_key = image_model_spec.model, image_model_spec.API_KEY
         bots[model_fqn] = FireworksPoeImageBot(
             model=model_fqn,
+            api_key=api_key,
             environment=args.environment,
             server_version="0.0.1",
             gcs_bucket_name=os.environ["GCS_BUCKET_NAME"],

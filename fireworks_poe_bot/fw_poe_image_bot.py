@@ -14,6 +14,7 @@ from .fastapi_poe.types import (
     ErrorResponse,
 )
 
+import fireworks.client
 from fireworks.client.api import ChatMessage
 from fireworks.client.error import InvalidRequestError
 from fireworks.client.image import ImageInference, Answer
@@ -34,12 +35,14 @@ class FireworksPoeImageBot(PoeBot):
     def __init__(
         self,
         model: str,
+        api_key: str,
         environment: str,
         server_version: str,
         gcs_bucket_name: str,
     ):
         super().__init__()
         self.model = model
+        self.api_key = api_key
         self.environment = environment
         self.server_version = server_version
 
@@ -158,6 +161,9 @@ class FireworksPoeImageBot(PoeBot):
 
         log_query = copy.copy(query.dict())
         log_query.update({"query": redacted_msgs})
+
+        orig_api_key = self.client.api_key
+        fireworks.client.api_key = self.api_key
         try:
             # generated_len = 0
             start_t = time.time()
@@ -251,6 +257,8 @@ class FireworksPoeImageBot(PoeBot):
                 error_type = None
             yield ErrorResponse(allow_retry=False, error_type=error_type, text=str(e))
             return
+        finally:
+            fireworks.client.api_key = orig_api_key
 
     # Function to upload a PIL Image to an S3 bucket with a presigned URL
     def _upload_image_to_s3_with_ttl(
