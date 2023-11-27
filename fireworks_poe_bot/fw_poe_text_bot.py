@@ -1,8 +1,8 @@
 import copy
 from typing import AsyncIterable, Dict, List, Union, Any
-from fastapi_poe import PoeBot
+from .fastapi_poe import PoeBot
 from sse_starlette.sse import ServerSentEvent
-from fastapi_poe.types import (
+from .fastapi_poe.types import (
     PartialResponse,
     QueryRequest,
     ReportErrorRequest,
@@ -12,6 +12,7 @@ from fastapi_poe.types import (
     ErrorResponse,
 )
 
+import fireworks.client
 from fireworks.client import ChatCompletion
 from fireworks.client.api import ChatCompletionResponseStreamChoice, ChatMessage
 from fireworks.client.error import InvalidRequestError
@@ -26,10 +27,11 @@ import httpx
 from PIL import Image
 
 
-class FireworksPoeServerBot(PoeBot):
+class FireworksPoeTextBot(PoeBot):
     def __init__(
         self,
         model: str,
+        api_key: str,
         environment: str,
         server_version: str,
         image_size: int,
@@ -38,6 +40,7 @@ class FireworksPoeServerBot(PoeBot):
     ):
         super().__init__()
         self.model = model
+        self.api_key = api_key
         self.environment = environment
         self.server_version = server_version
         self.image_size = image_size
@@ -227,6 +230,9 @@ class FireworksPoeServerBot(PoeBot):
 
         log_query = copy.copy(query.dict())
         log_query.update({"query": redacted_msgs})
+
+        orig_api_key = fireworks.client.api_key
+        fireworks.client.api_key = self.api_key
         try:
             generated_len = 0
             start_t = time.time()
@@ -284,6 +290,8 @@ class FireworksPoeServerBot(PoeBot):
                 error_type = None
             yield ErrorResponse(allow_retry=False, error_type=error_type, text=str(e))
             return
+        finally:
+            fireworks.client.api_key = orig_api_key
 
     async def get_settings(self, setting: SettingsRequest) -> SettingsResponse:
         return SettingsResponse(allow_attachments=self.allow_attachments)
