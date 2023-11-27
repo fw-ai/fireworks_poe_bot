@@ -16,10 +16,10 @@ import fireworks.client
 from fireworks.client import ChatCompletion
 from fireworks.client.api import ChatCompletionResponseStreamChoice, ChatMessage
 from fireworks.client.error import InvalidRequestError
+from fireworks_poe_bot.plugin import log_error, log_info, log_warn
 
 from typing import Callable
 from itertools import groupby
-import logging
 import time
 import io
 import base64
@@ -57,7 +57,7 @@ class FireworksPoeTextBot(PoeBot):
                 "server_version": self.server_version,
             }
         )
-        logging.warning(payload)
+        log_warn(payload)
 
     def _log_info(self, payload: Dict):
         payload = copy.copy(payload)
@@ -69,7 +69,7 @@ class FireworksPoeTextBot(PoeBot):
                 "server_version": self.server_version,
             }
         )
-        logging.info(payload)
+        log_info(payload)
 
     async def download_image_and_encode_to_base64(
         self,
@@ -118,13 +118,9 @@ class FireworksPoeTextBot(PoeBot):
 
         messages: List[ChatMessage] = []
 
-        redacted_msgs = []
         cumulative_image_size_mb = 0
         for protocol_message in query.query:
-            # Redacted message for logging
-            log_msg = copy.copy(protocol_message.dict())
-            log_msg.update({"content": f"Content(len={len(protocol_message.content)})"})
-            redacted_msgs.append(log_msg)
+            log_msg = protocol_message.dict()
 
             # OpenAI/Fireworks use the "assistant" role for the LLM, but Poe uses the
             # "bot" role. Replace that one. Otherwise, ignore the role
@@ -228,14 +224,12 @@ class FireworksPoeTextBot(PoeBot):
             self._log_warn({"msg": f"Last message {messages[-1]} not a user message"})
             messages.append({"role": "user", "content": ""})
 
-        log_query = copy.copy(query.dict())
-        log_query.update({"query": redacted_msgs})
-
         orig_api_key = fireworks.client.api_key
         fireworks.client.api_key = self.api_key
         try:
             generated_len = 0
             start_t = time.time()
+            complete_response = ""
             async for response in self.completion_async_method(
                 model=self.model,
                 messages=messages,
@@ -254,6 +248,7 @@ class FireworksPoeTextBot(PoeBot):
                         continue
 
                     generated_len += len(choice.delta.content)
+                    complete_response += choice.delta.content
                     yield PartialResponse(
                         text=choice.delta.content,
                         raw_response=response,
@@ -266,7 +261,8 @@ class FireworksPoeTextBot(PoeBot):
                 {
                     "severity": "INFO",
                     "msg": "Request completed",
-                    **log_query,
+                    "query": query.dict(),
+                    "response": complete_response,
                     "generated_len": generated_len,
                     "elapsed_sec": elapsed_sec,
                 }
@@ -275,13 +271,13 @@ class FireworksPoeTextBot(PoeBot):
             return
         except InvalidRequestError as e:
             end_t = time.time()
-            logging.error(
+            log_error(
                 {
                     "severity": "ERROR",
                     "msg": "Invalid request",
                     "error": e,
                     "elapsed_sec": end_t - start_t,
-                    **log_query,
+                    "query": query.dict(),
                 }
             )
             if "prompt is too long" in str(e):
@@ -302,7 +298,7 @@ class FireworksPoeTextBot(PoeBot):
 
     async def on_error(self, error_request: ReportErrorRequest) -> None:
         """Override this to record errors from the Poe server."""
-        logging.error(
+        log_error(
             {
                 "severity": "ERROR",
                 "msg": "Error reported",

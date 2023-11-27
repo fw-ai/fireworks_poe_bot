@@ -18,10 +18,9 @@ import fireworks.client
 from fireworks.client.api import ChatMessage
 from fireworks.client.error import InvalidRequestError
 from fireworks.client.image import ImageInference, Answer
+from fireworks_poe_bot.plugin import log_error, log_info, log_warn
 
-from typing import Callable
 from itertools import groupby
-import logging
 import time
 from PIL import Image
 import uuid
@@ -100,7 +99,7 @@ class FireworksPoeQRBot(PoeBot):
                 "server_version": self.server_version,
             }
         )
-        logging.warning(payload)
+        log_warn(payload)
 
     def _log_info(self, payload: Dict):
         payload = copy.copy(payload)
@@ -112,7 +111,7 @@ class FireworksPoeQRBot(PoeBot):
                 "server_version": self.server_version,
             }
         )
-        logging.info(payload)
+        log_info(payload)
 
     async def get_response(
         self, query: QueryRequest
@@ -250,7 +249,7 @@ class FireworksPoeQRBot(PoeBot):
             return
         except InvalidRequestError as e:
             end_t = time.time()
-            logging.error(
+            log_error(
                 {
                     "severity": "ERROR",
                     "msg": "Invalid request",
@@ -358,7 +357,7 @@ class FireworksPoeQRBot(PoeBot):
 
     async def on_error(self, error_request: ReportErrorRequest) -> None:
         """Override this to record errors from the Poe server."""
-        logging.error(
+        log_error(
             {
                 "severity": "ERROR",
                 "msg": "Error reported",
