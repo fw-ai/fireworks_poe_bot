@@ -1,8 +1,8 @@
 import copy
 from typing import AsyncIterable, Dict, List, Union, Any
-from fastapi_poe import PoeBot
+from .fastapi_poe import PoeBot
 from sse_starlette.sse import ServerSentEvent
-from fastapi_poe.types import (
+from .fastapi_poe.types import (
     PartialResponse,
     QueryRequest,
     ReportErrorRequest,

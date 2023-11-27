@@ -3,7 +3,7 @@ from fireworks_poe_bot import (
     FireworksPoeServerBot,
 )
 from sse_starlette.sse import ServerSentEvent
-from fastapi_poe.types import (
+from .fastapi_poe.types import (
     QueryRequest,
     ProtocolMessage,
     PartialResponse,
