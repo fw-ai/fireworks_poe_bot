@@ -1,4 +1,4 @@
-from fireworks_poe_bot.fw_poe_server_bot import FireworksPoeServerBot
+from fireworks_poe_bot.fw_poe_text_bot import FireworksPoeTextBot
 from fireworks_poe_bot.logging import UVICORN_LOGGING_CONFIG
 
 
@@ -12,7 +12,8 @@ import uvicorn
 class ServerArgs:
     host: str = "0.0.0.0"
     port: int = 80
-    model: str = ""
+    text_models: str = ""
+    image_models: str = ""
     image_size: int = 336
     allow_attachments: bool = False
     environment: str = ""
@@ -33,7 +34,12 @@ def main():
     server_group = parser.add_argument_group("server", "Server arguments")
     server_group.add_argument("--host", type=str, default=server_args.host)
     server_group.add_argument("-p", "--port", type=int, default=server_args.port)
-    server_group.add_argument("-m", "--model", type=str, default=server_args.model)
+    server_group.add_argument(
+        "-t", "--text-models", type=str, default=server_args.text_models
+    )
+    server_group.add_argument(
+        "-i", "--image-models", type=str, default=server_args.image_models
+    )
     server_group.add_argument(
         "-s", "--image-size", type=int, default=server_args.image_size
     )
@@ -43,7 +49,6 @@ def main():
     )
 
     args = parser.parse_args()
-    assert args.model, "Model must be specified"
 
     # Parse arguments.
     for k, v in vars(args).items():
@@ -54,14 +59,24 @@ def main():
         else:
             assert k in ["print_supported_models"], f"Unknown argument {k}"
 
-    bot = FireworksPoeServerBot(
-        model=args.model,
-        environment=args.environment,
-        server_version="0.0.1",
-        image_size=args.image_size,
-        allow_attachments=args.allow_attachments,
-    )
-    app = make_app(bot, allow_without_key=True)
+    bots = {}
+
+    for model_fqn in args.text_models.split(","):
+        bots[model_fqn] = FireworksPoeTextBot(
+            model=model_fqn,
+            environment=args.environment,
+            server_version="0.0.1",
+            image_size=args.image_size,
+            allow_attachments=args.allow_attachments,
+        )
+
+    # TODO: IMAGE BOTS
+
+    assert (
+        len(bots) > 0
+    ), "No bots specified, use --text-models or --image-models to specify models to serve"
+
+    app = make_app(bots, allow_without_key=True)
 
     uvicorn.run(
         app,

@@ -1,6 +1,6 @@
 from typing import List
 from fireworks_poe_bot import (
-    FireworksPoeServerBot,
+    FireworksPoeTextBot,
 )
 from sse_starlette.sse import ServerSentEvent
 from .fastapi_poe.types import (
@@ -62,7 +62,7 @@ class TestFWPoeBot(unittest.IsolatedAsyncioTestCase):
         self.environment = ""
         self.server_version = ""
         self.completion_async_method = fake_chat_completion_acreate
-        self.bot = FireworksPoeServerBot(
+        self.bot = FireworksPoeTextBot(
             self.model,
             self.environment,
             self.server_version,

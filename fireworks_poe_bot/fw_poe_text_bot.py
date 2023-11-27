@@ -26,7 +26,7 @@ import httpx
 from PIL import Image
 
 
-class FireworksPoeServerBot(PoeBot):
+class FireworksPoeTextBot(PoeBot):
     def __init__(
         self,
         model: str,

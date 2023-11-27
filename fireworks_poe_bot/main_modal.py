@@ -1,4 +1,4 @@
-from fireworks_poe_bot.fw_poe_server_bot import FireworksPoeServerBot
+from fireworks_poe_bot.fw_poe_text_bot import FireworksPoeTextBot
 
 import fireworks.client
 
@@ -9,7 +9,7 @@ import os
 from modal import Image, Stub, asgi_app
 
 
-bot = FireworksPoeServerBot(os.environ["MODEL"], "", "0.0.1")
+bot = FireworksPoeTextBot(os.environ["MODEL"], "", "0.0.1")
 
 image = (
     Image.debian_slim()
