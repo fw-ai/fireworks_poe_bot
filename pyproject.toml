@@ -25,6 +25,9 @@ dependencies = [
     "fireworks-ai>=0.6.0",
     "uvicorn>=0.23.2",
     "typing_extensions>=4.0.0",
+    "opencv-python",
+    "numpy",
+    "google-cloud-storage",
 ]
 
 [project.scripts]

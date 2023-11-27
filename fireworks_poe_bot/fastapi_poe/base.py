@@ -14,7 +14,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sse_starlette.sse import EventSourceResponse, ServerSentEvent
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from fastapi_poe.types import (
+from .types import (
     ContentType,
     ErrorResponse,
     MetaResponse,
@@ -254,7 +254,7 @@ def _verify_access_key(
 
 
 def make_app(
-    bot: PoeBot,
+    bots: Dict[str, PoeBot],
     access_key: str = "",
     *,
     api_key: str = "",
@@ -269,8 +269,16 @@ def make_app(
         access_key=access_key, api_key=api_key, allow_without_key=allow_without_key
     )
 
-    @app.get("/")
-    async def index() -> Response:
+    def find_bot(account: str, model: str) -> PoeBot:
+        bot_fqn = f"accounts/{account}/models/{model}"
+        if bot_fqn not in bots:
+            raise HTTPException(status_code=404, detail=f"Bot {bot_fqn} not found")
+        return bots[bot_fqn]
+
+    @app.get("/accounts/{account}/models/{model}")
+    async def index(account: str, model: str) -> Response:
+        bot = find_bot(account, model)
+
         url = "https://poe.com/create_bot?server=1"
         return HTMLResponse(
             "<html><body><h1>FastAPI Poe bot server</h1><p>Congratulations! Your server"
@@ -278,8 +286,12 @@ def make_app(
             f' href="{url}">{url}</a>.</p></body></html>'
         )
 
-    @app.post("/")
-    async def poe_post(request: Dict[str, Any], dict=Depends(auth_user)) -> Response:
+    @app.post("/accounts/{account}/models/{model}")
+    async def poe_post(
+        account: str, model: str, request: Dict[str, Any], dict=Depends(auth_user)
+    ) -> Response:
+        bot = find_bot(account, model)
+
         if request["type"] == "query":
             return EventSourceResponse(
                 bot.handle_query(
@@ -309,7 +321,7 @@ def make_app(
 
 
 def run(
-    bot: PoeBot,
+    bots: Dict[str, PoeBot],
     access_key: str = "",
     *,
     api_key: str = "",
@@ -331,7 +343,10 @@ def run(
     """
 
     app = make_app(
-        bot, access_key=access_key, api_key=api_key, allow_without_key=allow_without_key
+        bots,
+        access_key=access_key,
+        api_key=api_key,
+        allow_without_key=allow_without_key,
     )
 
     parser = argparse.ArgumentParser("FastAPI sample Poe bot server")

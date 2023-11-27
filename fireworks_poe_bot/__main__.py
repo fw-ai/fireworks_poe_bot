@@ -1,11 +1,13 @@
 from fireworks_poe_bot.fw_poe_text_bot import FireworksPoeTextBot
+from fireworks_poe_bot.fw_poe_image_bot import FireworksPoeImageBot
 from fireworks_poe_bot.logging import UVICORN_LOGGING_CONFIG
 
 
 import argparse
 from dataclasses import dataclass
-from fastapi_poe import make_app
+from .fastapi_poe import make_app
 import uvicorn
+import os
 
 
 @dataclass
@@ -61,7 +63,7 @@ def main():
 
     bots = {}
 
-    for model_fqn in args.text_models.split(","):
+    for model_fqn in filter(lambda s: s != "", args.text_models.split(",")):
         bots[model_fqn] = FireworksPoeTextBot(
             model=model_fqn,
             environment=args.environment,
@@ -70,7 +72,13 @@ def main():
             allow_attachments=args.allow_attachments,
         )
 
-    # TODO: IMAGE BOTS
+    for model_fqn in filter(lambda s: s != "", args.image_models.split(",")):
+        bots[model_fqn] = FireworksPoeImageBot(
+            model=model_fqn,
+            environment=args.environment,
+            server_version="0.0.1",
+            gcs_bucket_name=os.environ["GCS_BUCKET_NAME"],
+        )
 
     assert (
         len(bots) > 0

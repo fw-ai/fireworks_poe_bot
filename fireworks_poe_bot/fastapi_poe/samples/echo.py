@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import AsyncIterable
 
-from fastapi_poe import PoeBot, run
-from fastapi_poe.types import PartialResponse, QueryRequest
+from .fastapi_poe import PoeBot, run
+from .fastapi_poe.types import PartialResponse, QueryRequest
 
 
 class EchoBot(PoeBot):
