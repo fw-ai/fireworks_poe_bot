@@ -18,7 +18,6 @@ class ServerArgs:
     port: int = 80
     config_file_path: str = "config.json"
     image_size: int = 336
-    allow_attachments: bool = False
     environment: str = ""
 
 
@@ -43,7 +42,6 @@ def main():
     server_group.add_argument(
         "-s", "--image-size", type=int, default=server_args.image_size
     )
-    server_group.add_argument("-a", "--allow-attachments", action="store_true")
     server_group.add_argument(
         "-e", "--environment", type=str, default=server_args.environment
     )
@@ -81,8 +79,8 @@ def main():
             api_key=api_key,
             environment=args.environment,
             server_version="0.0.1",
-            image_size=args.image_size,
-            allow_attachments=args.allow_attachments,
+            image_size=text_model_spec.input_image_size,
+            allow_attachments=text_model_spec.allow_attachments,
         )
 
     for image_model_spec in config.image_models:

@@ -11,13 +11,16 @@ class ModelConfig(BaseModel):
     account_override: Optional[str] = None
     model_override: Optional[str] = None
 
+class TextModelConfig(ModelConfig):
+    allow_attachments: Optional[bool] = False
+    input_image_size: Optional[int] = None
 
 class QRCodeConfig(ModelConfig):
     conditioning_scale: Optional[float] = None
 
 
 class Config(BaseModel):
-    text_models: List[ModelConfig] = []
+    text_models: List[TextModelConfig] = []
     image_models: List[ModelConfig] = []
     qr_models: List[QRCodeConfig] = []
 
