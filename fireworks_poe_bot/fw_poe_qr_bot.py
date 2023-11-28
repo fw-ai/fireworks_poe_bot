@@ -226,7 +226,7 @@ class FireworksPoeQRBot(PoeBot):
             public_image_url = self._upload_image_to_gcs(
                 answer.image, self.gcs_bucket_name
             )
-            yield PartialResponse(text=f"![image]({public_image_url})")
+            response_text = f"![image]({public_image_url})"
 
             end_t = time.time()
             elapsed_sec = end_t - start_t
@@ -235,11 +235,13 @@ class FireworksPoeQRBot(PoeBot):
                     "severity": "INFO",
                     "msg": "Request completed",
                     **query.dict(),
+                    response: response_text,
                     "elapsed_sec": elapsed_sec,
                     "elapsed_sec_inference": end_t_inference - start_t,
                     "elapsed_sec_upload": end_t - start_t_encode,
                 }
             )
+            yield PartialResponse(text=response_text)
             yield ServerSentEvent(event="done")
             return
         except InvalidRequestError as e:
