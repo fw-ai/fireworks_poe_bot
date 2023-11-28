@@ -3,12 +3,15 @@ from fireworks_poe_bot.fw_poe_image_bot import FireworksPoeImageBot
 from fireworks_poe_bot.fw_poe_qr_bot import FireworksPoeQRBot
 from fireworks_poe_bot.logging import UVICORN_LOGGING_CONFIG
 from fireworks_poe_bot.config import Config, load_config
+from fireworks_poe_bot.plugin import LoggingPlugin, register_logging_plugin
 
 
 import argparse
 from dataclasses import dataclass
+from typing import Any, Dict
 from .fastapi_poe import make_app
 import uvicorn
+import logging
 import os
 
 
@@ -19,45 +22,64 @@ class ServerArgs:
     config_file_path: str = "config.json"
     image_size: int = 336
     environment: str = ""
+    deployment: str = "poe-omnibot"
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        prog="fireworks_poe_bot",
-        description=f"""
-    Fireworks LLM Poe Server Bot v0.0.1.
+class PyLoggingPlugin(LoggingPlugin):
+    def log_warn(self, payload: Dict[str, Any]):
+        logging.warning(payload)
 
-    Copyright (c) 2023 Fireworks.ai, Inc. and affiliates.
-    """,
-    )
+    def log_info(self, payload: Dict[str, Any]):
+        logging.info(payload)
 
-    # Server args.
-    server_args = ServerArgs()
-    server_group = parser.add_argument_group("server", "Server arguments")
-    server_group.add_argument("--host", type=str, default=server_args.host)
-    server_group.add_argument("-p", "--port", type=int, default=server_args.port)
-    server_group.add_argument(
-        "-c", "--config-file-path", type=str, default=server_args.config_file_path
-    )
-    server_group.add_argument(
-        "-s", "--image-size", type=int, default=server_args.image_size
-    )
-    server_group.add_argument(
-        "-e", "--environment", type=str, default=server_args.environment
-    )
+    def log_error(self, payload: Dict[str, Any]):
+        logging.error(payload)
 
-    args = parser.parse_args()
 
-    # Parse arguments.
-    for k, v in vars(args).items():
-        for g in [server_args]:
-            if hasattr(g, k):
-                setattr(g, k, v)
-                break
-        else:
-            assert k in ["print_supported_models"], f"Unknown argument {k}"
+def main(args=None):
+    if args is None:
+        parser = argparse.ArgumentParser(
+            prog="fireworks_poe_bot",
+            description=f"""
+        Fireworks LLM Poe Server Bot v0.0.1.
+
+        Copyright (c) 2023 Fireworks.ai, Inc. and affiliates.
+        """,
+        )
+
+        # Server args.
+        server_args = ServerArgs()
+        server_group = parser.add_argument_group("server", "Server arguments")
+        server_group.add_argument("--host", type=str, default=server_args.host)
+        server_group.add_argument("-p", "--port", type=int, default=server_args.port)
+        server_group.add_argument(
+            "-c", "--config-file-path", type=str, default=server_args.config_file_path
+        )
+        server_group.add_argument(
+            "-s", "--image-size", type=int, default=server_args.image_size
+        )
+        server_group.add_argument(
+            "-e", "--environment", type=str, default=server_args.environment
+        )
+        server_group.add_argument(
+            "-d", "--deployment", type=str, default=server_args.deployment
+        )
+
+        args = parser.parse_args()
+
+        # Parse arguments.
+        for k, v in vars(args).items():
+            for g in [server_args]:
+                if hasattr(g, k):
+                    setattr(g, k, v)
+                    break
+            else:
+                assert k in ["print_supported_models"], f"Unknown argument {k}"
 
     config = load_config(args.config_file_path)
+
+    # Register default logging plugin
+    register_logging_plugin(PyLoggingPlugin())
 
     bots = {}
 
@@ -78,6 +100,7 @@ def main():
             model=text_model_spec.model,
             api_key=api_key,
             environment=args.environment,
+            deployment=args.deployment,
             server_version="0.0.1",
             image_size=text_model_spec.input_image_size,
             allow_attachments=text_model_spec.allow_attachments,
@@ -100,6 +123,7 @@ def main():
             model=image_model_spec.model,
             api_key=api_key,
             environment=args.environment,
+            deployment=args.deployment,
             server_version="0.0.1",
             gcs_bucket_name=os.environ["GCS_BUCKET_NAME"],
         )
@@ -121,6 +145,7 @@ def main():
             model=qr_model_spec.model,
             api_key=api_key,
             environment=args.environment,
+            deployment=args.deployment,
             server_version="0.0.1",
             gcs_bucket_name=os.environ["GCS_BUCKET_NAME"],
             conditioning_scale=qr_model_spec.conditioning_scale,
@@ -136,8 +161,8 @@ def main():
 
     uvicorn.run(
         app,
-        host=server_args.host,
-        port=server_args.port,
+        host=args.host,
+        port=args.port,
         log_level="info",
         server_header=False,
         log_config=UVICORN_LOGGING_CONFIG,
