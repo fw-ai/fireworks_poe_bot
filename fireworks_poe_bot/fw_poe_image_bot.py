@@ -100,20 +100,14 @@ class FireworksPoeImageBot(PoeBot):
 
         messages: List[ChatMessage] = []
 
-        redacted_msgs = []
         for protocol_message in query.query:
-            # Redacted message for logging
-            log_msg = copy.copy(protocol_message.dict())
-            log_msg.update({"content": f"Content(len={len(protocol_message.content)})"})
-            redacted_msgs.append(log_msg)
-
             # OpenAI/Fireworks use the "assistant" role for the LLM, but Poe uses the
             # "bot" role. Replace that one. Otherwise, ignore the role
             if protocol_message.role not in {"system", "user", "bot"}:
-                self._log_warn({"msg": "Unknown role", **log_msg})
+                self._log_warn({"msg": "Unknown role", **protocol_message})
                 continue
             if protocol_message.content_type not in {"text/plain", "text/markdown"}:
-                self._log_warn({"msg": "Unknown content type", **log_msg})
+                self._log_warn({"msg": "Unknown content type", **protocol_message})
                 continue
             # TODO: support protocol_message.feedback and protocol_message.attachments
             # if needed
@@ -123,12 +117,12 @@ class FireworksPoeImageBot(PoeBot):
                 role = protocol_message.role
             messages.append({"role": role, "content": protocol_message.content})
 
-            self._log_info(
-                {
-                    "msg": "Message received",
-                    **log_msg,
-                }
-            )
+        self._log_info(
+            {
+                "msg": "Request received",
+                **query.dict(),
+            }
+        )
 
         # The poe servers send us arbitrary lists of messages. We need to do a few things
         # to normalize for our chat completion API:
@@ -161,9 +155,6 @@ class FireworksPoeImageBot(PoeBot):
         if messages[-1]["role"] != "user":
             self._log_warn({"msg": f"Last message {messages[-1]} not a user message"})
             messages.append({"role": "user", "content": ""})
-
-        log_query = copy.copy(query.dict())
-        log_query.update({"query": redacted_msgs})
 
         orig_api_key = self.client.api_key
         fireworks.client.api_key = self.api_key
@@ -235,7 +226,7 @@ class FireworksPoeImageBot(PoeBot):
                 {
                     "severity": "INFO",
                     "msg": "Request completed",
-                    **log_query,
+                    **query.dict(),
                     "elapsed_sec": elapsed_sec,
                     "elapsed_sec_inference": end_t_inference - start_t,
                     "elapsed_sec_upload": end_t - start_t_encode,
@@ -251,7 +242,7 @@ class FireworksPoeImageBot(PoeBot):
                     "msg": "Invalid request",
                     "error": e,
                     "elapsed_sec": end_t - start_t,
-                    **log_query,
+                    **query.dict(),
                 }
             )
             if "prompt is too long" in str(e):
