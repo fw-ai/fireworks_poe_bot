@@ -8,7 +8,7 @@ from fireworks_poe_bot.plugin import LoggingPlugin, register_logging_plugin
 
 import argparse
 from dataclasses import dataclass
-from typing import Dict
+from typing import Any, Dict
 from .fastapi_poe import make_app
 import uvicorn
 import logging
@@ -26,13 +26,13 @@ class ServerArgs:
 
 
 class PyLoggingPlugin(LoggingPlugin):
-    def log_warn(self, payload: Dict[str, str]):
+    def log_warn(self, payload: Dict[str, Any]):
         logging.warning(payload)
 
-    def log_info(self, payload: Dict[str, str]):
+    def log_info(self, payload: Dict[str, Any]):
         logging.info(payload)
 
-    def log_error(self, payload: Dict[str, str]):
+    def log_error(self, payload: Dict[str, Any]):
         logging.error(payload)
 
 
@@ -100,7 +100,7 @@ def main(args=None):
             model=text_model_spec.model,
             api_key=api_key,
             environment=args.environment,
-            deployment=deployment,
+            deployment=args.deployment,
             server_version="0.0.1",
             image_size=text_model_spec.input_image_size,
             allow_attachments=text_model_spec.allow_attachments,
@@ -123,7 +123,7 @@ def main(args=None):
             model=image_model_spec.model,
             api_key=api_key,
             environment=args.environment,
-            deployment=deployment,
+            deployment=args.deployment,
             server_version="0.0.1",
             gcs_bucket_name=os.environ["GCS_BUCKET_NAME"],
         )
@@ -145,7 +145,7 @@ def main(args=None):
             model=qr_model_spec.model,
             api_key=api_key,
             environment=args.environment,
-            deployment=deployment,
+            deployment=args.deployment,
             server_version="0.0.1",
             gcs_bucket_name=os.environ["GCS_BUCKET_NAME"],
             conditioning_scale=qr_model_spec.conditioning_scale,
