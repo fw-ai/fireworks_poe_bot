@@ -8,8 +8,8 @@ class ModelConfig(BaseModel):
     model: str
     API_KEY: str
 
-    account_override: Optional[str] = None
-    model_override: Optional[str] = None
+    endpoint_account_override: Optional[str] = None
+    endpoint_model_override: Optional[str] = None
 
 class TextModelConfig(ModelConfig):
     allow_attachments: Optional[bool] = False
