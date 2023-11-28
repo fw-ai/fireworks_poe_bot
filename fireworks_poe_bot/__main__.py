@@ -22,6 +22,7 @@ class ServerArgs:
     config_file_path: str = "config.json"
     image_size: int = 336
     environment: str = ""
+    deployment: str = "poe-omnibot"
 
 
 class PyLoggingPlugin(LoggingPlugin):
@@ -60,6 +61,9 @@ def main(args=None):
         server_group.add_argument(
             "-e", "--environment", type=str, default=server_args.environment
         )
+        server_group.add_argument(
+            "-d", "--deployment", type=str, default=server_args.deployment
+        )
 
         args = parser.parse_args()
 
@@ -96,6 +100,7 @@ def main(args=None):
             model=text_model_spec.model,
             api_key=api_key,
             environment=args.environment,
+            deployment=deployment,
             server_version="0.0.1",
             image_size=text_model_spec.input_image_size,
             allow_attachments=text_model_spec.allow_attachments,
@@ -118,6 +123,7 @@ def main(args=None):
             model=image_model_spec.model,
             api_key=api_key,
             environment=args.environment,
+            deployment=deployment,
             server_version="0.0.1",
             gcs_bucket_name=os.environ["GCS_BUCKET_NAME"],
         )
@@ -139,6 +145,7 @@ def main(args=None):
             model=qr_model_spec.model,
             api_key=api_key,
             environment=args.environment,
+            deployment=deployment,
             server_version="0.0.1",
             gcs_bucket_name=os.environ["GCS_BUCKET_NAME"],
             conditioning_scale=qr_model_spec.conditioning_scale,
