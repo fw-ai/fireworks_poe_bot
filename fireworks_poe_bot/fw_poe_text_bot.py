@@ -33,6 +33,7 @@ class FireworksPoeTextBot(PoeBot):
         model: str,
         api_key: str,
         environment: str,
+        deployment: str,
         server_version: str,
         image_size: int,
         completion_async_method: Callable = ChatCompletion.acreate,
@@ -42,6 +43,7 @@ class FireworksPoeTextBot(PoeBot):
         self.model = model
         self.api_key = api_key
         self.environment = environment
+        self.deployment = deployment
         self.server_version = server_version
         self.image_size = image_size
         self.completion_async_method = completion_async_method
@@ -53,6 +55,7 @@ class FireworksPoeTextBot(PoeBot):
             {
                 "severity": "WARNING",
                 "environment": self.environment,
+                "deployment": self.deployment,
                 "model": self.model,
                 "server_version": self.server_version,
             }
@@ -65,6 +68,7 @@ class FireworksPoeTextBot(PoeBot):
             {
                 "severity": "INFO",
                 "environment": self.environment,
+                "deployment": self.deployment,
                 "model": self.model,
                 "server_version": self.server_version,
             }

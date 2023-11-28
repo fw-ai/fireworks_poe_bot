@@ -60,6 +60,7 @@ class FireworksPoeQRBot(PoeBot):
         model: str,
         api_key: str,
         environment: str,
+        deployment: str,
         server_version: str,
         gcs_bucket_name: str,
         conditioning_scale: float,
@@ -68,6 +69,7 @@ class FireworksPoeQRBot(PoeBot):
         self.model = model
         self.api_key = api_key
         self.environment = environment
+        self.deployment = deployment
         self.server_version = server_version
 
         model_atoms = model.split("/")
@@ -95,6 +97,7 @@ class FireworksPoeQRBot(PoeBot):
             {
                 "severity": "WARNING",
                 "environment": self.environment,
+                "deployment": self.deployment,
                 "model": self.model,
                 "server_version": self.server_version,
             }
@@ -107,6 +110,7 @@ class FireworksPoeQRBot(PoeBot):
             {
                 "severity": "INFO",
                 "environment": self.environment,
+                "deployment": self.deployment,
                 "model": self.model,
                 "server_version": self.server_version,
             }
