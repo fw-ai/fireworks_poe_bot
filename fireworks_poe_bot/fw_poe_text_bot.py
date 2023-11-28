@@ -173,12 +173,12 @@ class FireworksPoeTextBot(PoeBot):
             else:
                 messages.append({"role": role, "content": protocol_message.content})
 
-            self._log_info(
-                {
-                    "msg": "Message received",
-                    **log_msg,
-                }
-            )
+        self._log_info(
+            {
+                "msg": "Request received",
+                **query.dict(),
+            }
+        )
         # The poe servers send us arbitrary lists of messages. We need to do a few things
         # to normalize for our chat completion API:
         # 1. Ensure that all assistant messages are preceded by a user message
