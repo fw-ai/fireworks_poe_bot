@@ -87,12 +87,12 @@ def main(args=None):
         model = text_model_spec.model
         api_key = text_model_spec.API_KEY
         if (
-            text_model_spec.account_override is not None
-            or text_model_spec.model_override is not None
+            text_model_spec.endpoint_account_override is not None
+            or text_model_spec.endpoint_model_override is not None
         ):
             _, account, _, model = model.split("/")
-            account = text_model_spec.account_override or account
-            model = text_model_spec.model_override or model
+            account = text_model_spec.endpoint_account_override or account
+            model = text_model_spec.endpoint_model_override or model
             model_fqn = f"accounts/{account}/models/{model}"
         else:
             model_fqn = model
@@ -110,12 +110,12 @@ def main(args=None):
         model = image_model_spec.model
         api_key = image_model_spec.API_KEY
         if (
-            image_model_spec.account_override is not None
-            or image_model_spec.model_override is not None
+            image_model_spec.endpoint_account_override is not None
+            or image_model_spec.endpoint_model_override is not None
         ):
             _, account, _, model = model.split("/")
-            account = image_model_spec.account_override or account
-            model = image_model_spec.model_override or model
+            account = image_model_spec.endpoint_account_override or account
+            model = image_model_spec.endpoint_model_override or model
             model_fqn = f"accounts/{account}/models/{model}"
         else:
             model_fqn = model
@@ -132,12 +132,12 @@ def main(args=None):
         model = qr_model_spec.model
         api_key = qr_model_spec.API_KEY
         if (
-            qr_model_spec.account_override is not None
-            or qr_model_spec.model_override is not None
+            qr_model_spec.endpoint_account_override is not None
+            or qr_model_spec.endpoint_model_override is not None
         ):
             _, account, _, model = model.split("/")
-            account = qr_model_spec.account_override or account
-            model = qr_model_spec.model_override or model
+            account = qr_model_spec.endpoint_account_override or account
+            model = qr_model_spec.endpoint_model_override or model
             model_fqn = f"accounts/{account}/models/{model}"
         else:
             model_fqn = model
