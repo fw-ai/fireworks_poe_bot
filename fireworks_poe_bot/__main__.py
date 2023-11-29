@@ -2,8 +2,7 @@ from fireworks_poe_bot.fw_poe_text_bot import FireworksPoeTextBot
 from fireworks_poe_bot.fw_poe_image_bot import FireworksPoeImageBot
 from fireworks_poe_bot.fw_poe_qr_bot import FireworksPoeQRBot
 from fireworks_poe_bot.logging import UVICORN_LOGGING_CONFIG
-from fireworks_poe_bot.config import Config, load_config
-from fireworks_poe_bot.plugin import LoggingPlugin, register_logging_plugin
+from fireworks_poe_bot.plugin import LoggingPlugin, register_logging_plugin, BOT_PLUGINS, log_info
 
 
 import argparse
@@ -13,6 +12,7 @@ from .fastapi_poe import make_app
 import uvicorn
 import logging
 import os
+import json
 
 
 @dataclass
@@ -41,7 +41,7 @@ def main(args=None):
         parser = argparse.ArgumentParser(
             prog="fireworks_poe_bot",
             description=f"""
-        Fireworks LLM Poe Server Bot v0.0.1.
+        Fireworks LLM Poe Server Bot
 
         Copyright (c) 2023 Fireworks.ai, Inc. and affiliates.
         """,
@@ -76,82 +76,40 @@ def main(args=None):
             else:
                 assert k in ["print_supported_models"], f"Unknown argument {k}"
 
-    config = load_config(args.config_file_path)
-
     # Register default logging plugin
     register_logging_plugin(PyLoggingPlugin())
 
+    # Load bots from config
+    with open(args.config_file_path) as f:
+        config = json.load(f)
+
+    remaining_config_keys = set(config.keys())
+
     bots = {}
 
-    for text_model_spec in config.text_models:
-        model = text_model_spec.model
-        api_key = text_model_spec.API_KEY
-        if (
-            text_model_spec.endpoint_account_override is not None
-            or text_model_spec.endpoint_model_override is not None
-        ):
-            _, account, _, model = model.split("/")
-            account = text_model_spec.endpoint_account_override or account
-            model = text_model_spec.endpoint_model_override or model
-            model_fqn = f"accounts/{account}/models/{model}"
-        else:
-            model_fqn = model
-        bots[model_fqn] = FireworksPoeTextBot(
-            model=text_model_spec.model,
-            api_key=api_key,
-            environment=args.environment,
-            deployment=args.deployment,
-            server_version="0.0.1",
-            image_size=text_model_spec.input_image_size,
-            allow_attachments=text_model_spec.allow_attachments,
+    for plugin in BOT_PLUGINS:
+        if plugin.config_key in config:
+            remaining_config_keys.remove(plugin.config_key)
+            for config_dict in config[plugin.config_key]:
+                bot_config = plugin.BotConfigClass(**config_dict)
+                model_fqn = bot_config.model_fqn
+                ctor_dict = bot_config.dict()
+                for k in list(ctor_dict.keys()):
+                    if k.startswith("SERVER_"):
+                        ctor_dict.pop(k)
+                bots[model_fqn] = plugin.BotPluginClass(
+                    environment=args.environment,
+                    deployment=args.deployment,
+                    server_version="0.0.1",  # FIXME: versioneer?
+                    **ctor_dict
+                )
+
+    if len(remaining_config_keys) > 0:
+        raise ValueError(
+            f"Unknown config keys: {remaining_config_keys}, supported keys: {set([plugin.config_key for plugin in BOT_PLUGINS])}"
         )
 
-    for image_model_spec in config.image_models:
-        model = image_model_spec.model
-        api_key = image_model_spec.API_KEY
-        if (
-            image_model_spec.endpoint_account_override is not None
-            or image_model_spec.endpoint_model_override is not None
-        ):
-            _, account, _, model = model.split("/")
-            account = image_model_spec.endpoint_account_override or account
-            model = image_model_spec.endpoint_model_override or model
-            model_fqn = f"accounts/{account}/models/{model}"
-        else:
-            model_fqn = model
-        bots[model_fqn] = FireworksPoeImageBot(
-            model=image_model_spec.model,
-            api_key=api_key,
-            environment=args.environment,
-            deployment=args.deployment,
-            server_version="0.0.1",
-            gcs_bucket_name=os.environ["GCS_BUCKET_NAME"],
-        )
-
-    for qr_model_spec in config.qr_models:
-        model = qr_model_spec.model
-        api_key = qr_model_spec.API_KEY
-        if (
-            qr_model_spec.endpoint_account_override is not None
-            or qr_model_spec.endpoint_model_override is not None
-        ):
-            _, account, _, model = model.split("/")
-            account = qr_model_spec.endpoint_account_override or account
-            model = qr_model_spec.endpoint_model_override or model
-            model_fqn = f"accounts/{account}/models/{model}"
-        else:
-            model_fqn = model
-        bots[model_fqn] = FireworksPoeQRBot(
-            model=qr_model_spec.model,
-            api_key=api_key,
-            environment=args.environment,
-            deployment=args.deployment,
-            server_version="0.0.1",
-            gcs_bucket_name=os.environ["GCS_BUCKET_NAME"],
-            conditioning_scale=qr_model_spec.conditioning_scale,
-        )
-
-    print("Loaded bots", bots)
+    log_info({'message': f"Loaded bots: {bots}"})
 
     assert (
         len(bots) > 0

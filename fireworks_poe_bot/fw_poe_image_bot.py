@@ -18,7 +18,8 @@ import fireworks.client
 from fireworks.client.api import ChatMessage
 from fireworks.client.error import InvalidRequestError
 from fireworks.client.image import ImageInference, Answer
-from fireworks_poe_bot.plugin import log_error, log_info, log_warn
+from fireworks_poe_bot.plugin import log_error, log_info, log_warn, register_bot_plugin
+from fireworks_poe_bot.config import ModelConfig
 
 from itertools import groupby
 import time
@@ -29,7 +30,10 @@ import cv2
 import numpy as np
 from google.cloud import storage
 
+class ImageModelConfig(ModelConfig):
+    gcs_bucket_name: str
 
+@register_bot_plugin("image_models", ImageModelConfig)
 class FireworksPoeImageBot(PoeBot):
     def __init__(
         self,
