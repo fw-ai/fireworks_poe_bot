@@ -20,7 +20,6 @@ class ServerArgs:
     host: str = "0.0.0.0"
     port: int = 80
     config_file_path: str = "config.json"
-    image_size: int = 336
     environment: str = ""
     deployment: str = "poe-omnibot"
 
@@ -54,9 +53,6 @@ def main(args=None):
         server_group.add_argument("-p", "--port", type=int, default=server_args.port)
         server_group.add_argument(
             "-c", "--config-file-path", type=str, default=server_args.config_file_path
-        )
-        server_group.add_argument(
-            "-s", "--image-size", type=int, default=server_args.image_size
         )
         server_group.add_argument(
             "-e", "--environment", type=str, default=server_args.environment
