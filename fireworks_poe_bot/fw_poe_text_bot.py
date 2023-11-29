@@ -1,5 +1,5 @@
 import copy
-from typing import AsyncIterable, Dict, List, Union, Any
+from typing import AsyncIterable, Dict, List, Optional, Union, Any
 from .fastapi_poe import PoeBot
 from sse_starlette.sse import ServerSentEvent
 from .fastapi_poe.types import (
@@ -16,7 +16,8 @@ import fireworks.client
 from fireworks.client import ChatCompletion
 from fireworks.client.api import ChatCompletionResponseStreamChoice, ChatMessage
 from fireworks.client.error import InvalidRequestError
-from fireworks_poe_bot.plugin import log_error, log_info, log_warn
+from fireworks_poe_bot.plugin import log_error, log_info, log_warn, register_bot_plugin
+from fireworks_poe_bot.config import ModelConfig
 
 from typing import Callable
 from itertools import groupby
@@ -26,7 +27,11 @@ import base64
 import httpx
 from PIL import Image
 
+class TextModelConfig(ModelConfig):
+    allow_attachments: Optional[bool] = False
+    input_image_size: Optional[int] = None
 
+@register_bot_plugin("text_models", TextModelConfig)
 class FireworksPoeTextBot(PoeBot):
     def __init__(
         self,
@@ -35,7 +40,7 @@ class FireworksPoeTextBot(PoeBot):
         environment: str,
         deployment: str,
         server_version: str,
-        image_size: int,
+        input_image_size: int,
         completion_async_method: Callable = ChatCompletion.acreate,
         allow_attachments: bool = False,
     ):
@@ -45,7 +50,7 @@ class FireworksPoeTextBot(PoeBot):
         self.environment = environment
         self.deployment = deployment
         self.server_version = server_version
-        self.image_size = image_size
+        self.input_image_size = input_image_size
         self.completion_async_method = completion_async_method
         self.allow_attachments = allow_attachments
 
@@ -88,9 +93,9 @@ class FireworksPoeTextBot(PoeBot):
                 pil_img = Image.open(io.BytesIO(r.content))
                 width, height = pil_img.size
                 if width >= height:
-                    new_size = (self.image_size, int(height * self.image_size / width))
+                    new_size = (self.input_image_size, int(height * self.input_image_size / width))
                 else:
-                    new_size = (int(width * self.image_size / height), self.image_size)
+                    new_size = (int(width * self.input_image_size / height), self.input_image_size)
                 pil_img_resized = pil_img.resize(new_size)
                 buffered = io.BytesIO()
                 pil_img_resized.save(buffered, format="JPEG")
@@ -150,6 +155,7 @@ class FireworksPoeTextBot(PoeBot):
                         )
                     except Exception as e:
                         yield ErrorResponse(allow_retry=False, text=str(e))
+                        return
 
             if img_base64:
                 if cumulative_image_size_mb > 8:

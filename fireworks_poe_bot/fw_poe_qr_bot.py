@@ -1,7 +1,7 @@
 import base64
 import copy
 import io
-from typing import AsyncIterable, Dict, List, Union
+from typing import AsyncIterable, Dict, List, Optional, Union
 from .fastapi_poe import PoeBot
 from sse_starlette.sse import ServerSentEvent
 from .fastapi_poe.types import (
@@ -18,7 +18,8 @@ import fireworks.client
 from fireworks.client.api import ChatMessage
 from fireworks.client.error import InvalidRequestError
 from fireworks.client.image import ImageInference, Answer
-from fireworks_poe_bot.plugin import log_error, log_info, log_warn
+from fireworks_poe_bot.plugin import log_error, log_info, log_warn, register_bot_plugin
+from fireworks_poe_bot.config import ModelConfig
 
 from itertools import groupby
 import time
@@ -53,7 +54,11 @@ def gen_qr_code(input_text: str) -> Image:
 
     return new_img
 
+class QRCodeConfig(ModelConfig):
+    gcs_bucket_name: str
+    conditioning_scale: Optional[float] = None
 
+@register_bot_plugin("qr_models", QRCodeConfig)
 class FireworksPoeQRBot(PoeBot):
     def __init__(
         self,
@@ -122,7 +127,7 @@ class FireworksPoeQRBot(PoeBot):
     ) -> AsyncIterable[Union[PartialResponse, ServerSentEvent]]:
         if len(query.query) == 0:
             yield ErrorResponse(allow_retry=False, text="Empty query")
-            return
+            raise
 
         messages: List[ChatMessage] = []
 
@@ -235,7 +240,7 @@ class FireworksPoeQRBot(PoeBot):
                     "severity": "INFO",
                     "msg": "Request completed",
                     **query.dict(),
-                    response: response_text,
+                    "response": response_text,
                     "elapsed_sec": elapsed_sec,
                     "elapsed_sec_inference": end_t_inference - start_t,
                     "elapsed_sec_upload": end_t - start_t_encode,

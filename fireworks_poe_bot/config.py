@@ -1,34 +1,24 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional
-import json
 
 
 # Define the JSON schema using Pydantic
 class ModelConfig(BaseModel):
     model: str
-    API_KEY: str
+    api_key: str
 
-    endpoint_account_override: Optional[str] = None
-    endpoint_model_override: Optional[str] = None
+    SERVER_endpoint_account_override: Optional[str] = None
+    SERVER_endpoint_model_override: Optional[str] = None
 
-class TextModelConfig(ModelConfig):
-    allow_attachments: Optional[bool] = False
-    input_image_size: Optional[int] = None
-
-class QRCodeConfig(ModelConfig):
-    conditioning_scale: Optional[float] = None
-
-
-class Config(BaseModel):
-    text_models: List[TextModelConfig] = []
-    image_models: List[ModelConfig] = []
-    qr_models: List[QRCodeConfig] = []
-
-
-def load_config(file_path: str) -> Config:
-    with open(file_path, "r") as config_file:
-        data = json.load(config_file)
-
-    config = Config(**data)
-
-    return config
+    @property
+    def model_fqn(self):
+        if (
+            self.SERVER_endpoint_account_override is not None
+            or self.SERVER_endpoint_model_override is not None
+        ):
+            _, account, _, model = self.model.split("/")
+            account = self.SERVER_endpoint_account_override or account
+            model = self.SERVER_endpoint_model_override or model
+            return f"accounts/{account}/models/{model}"
+        else:
+            return self.model
