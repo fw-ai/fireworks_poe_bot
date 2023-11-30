@@ -29,6 +29,45 @@ import requests
 from google.cloud import storage
 import qrcode
 
+def parse_input(input_string, default_qr_strength, default_prompt_strength):
+    # Parse initial prompt
+    prompt_end_index = input_string.find('--')
+    if prompt_end_index == -1:
+        prompt_end_index = len(input_string)
+    prompt = input_string[:prompt_end_index].strip() if prompt_end_index != -1 else input_string.strip()
+    input_string = input_string[prompt_end_index:].strip()
+
+    qr_prompt = None
+    qr_strength = default_qr_strength
+    prompt_strength = default_prompt_strength
+    model = "sdxl"
+
+    while len(input_string) > 0:
+        next_flag_idx = input_string.find('--', 2)
+        if next_flag_idx == -1:
+            next_flag_idx = len(input_string)
+
+        # Parse the flag and its arguments
+        if input_string.startswith('--qr'):
+            qr_prompt = input_string[len("--qr"):next_flag_idx].strip()
+            input_string = input_string[next_flag_idx:].strip()
+        elif input_string.startswith('--qr-strength'):
+            qr_strength = float(input_string[len("--qr-strength"):next_flag_idx].strip())
+            input_string = input_string[next_flag_idx:].strip()
+        elif input_string.startswith('--prompt-strength'):
+            prompt_strength = int(input_string[len("--prompt-strength"):next_flag_idx].strip())
+            input_string = input_string[next_flag_idx:].strip()
+        elif input_string.startswith('--model'):
+            model = input_string[len("--model"):next_flag_idx].strip()
+            input_string = input_string[next_flag_idx:].strip()
+        else:
+            raise ValueError(f'Unknown flag: {input_string[:next_flag_idx]}')
+
+    if qr_prompt is None:
+        raise ValueError('Please specify a QR prompt with a --qr flag.')
+
+    return prompt, qr_prompt, qr_strength, prompt_strength, model
+
 
 def gen_qr_code(input_text: str) -> Image:
     # Generate QR Code
@@ -57,6 +96,7 @@ def gen_qr_code(input_text: str) -> Image:
 class QRCodeConfig(ModelConfig):
     gcs_bucket_name: str
     conditioning_scale: Optional[float] = None
+    default_cfg_scale: Optional[float] = None
 
 @register_bot_plugin("qr_models", QRCodeConfig)
 class FireworksPoeQRBot(PoeBot):
@@ -69,6 +109,7 @@ class FireworksPoeQRBot(PoeBot):
         server_version: str,
         gcs_bucket_name: str,
         conditioning_scale: float,
+        default_cfg_scale: float,
     ):
         super().__init__()
         self.model = model
@@ -76,6 +117,7 @@ class FireworksPoeQRBot(PoeBot):
         self.environment = environment
         self.deployment = deployment
         self.server_version = server_version
+        self.default_cfg_scale = default_cfg_scale if default_cfg_scale is not None else 8
 
         model_atoms = model.split("/")
         if len(model_atoms) != 4:
@@ -196,23 +238,28 @@ class FireworksPoeQRBot(PoeBot):
             assert messages[-1]["role"] == "user"
             prompt = messages[-1]["content"]
 
-            parts = prompt.split("--qr")
-            if len(parts) != 2:
-                yield self.text_event(
-                    text="Please include a --qr flag with your prompt"
-                )
+            try:
+                prompt, qr_data, qr_strength, prompt_strength, model = parse_input(prompt, self.conditioning_scale, self.default_cfg_scale)
+            except Exception as e:
+                yield self.text_event(text=f"Error parsing input: {e}")
                 return
 
-            prompt, qr_data = parts
+            if model == "sdxl":
+                self.client.model = "stable-diffusion-xl-1024-v1-0"
+            elif model == "sdv1.5":
+                self.client.model = "stable-diffusion-v1-5"
+            else:
+                yield self.text_event(text=f"Unknown model: {model}. Model must be one of 'sdxl' or 'sdv1.5'.")
+                return
 
             qr_image = gen_qr_code(qr_data)
 
             answer: Answer = await self.client.control_net_async(
                 control_image=qr_image,
                 control_net_name="qr",
-                conditioning_scale=self.conditioning_scale,
+                conditioning_scale=qr_strength,
                 prompt=prompt,
-                cfg_scale=7,
+                cfg_scale=prompt_strength,
                 sampler=None,
                 steps=25,
                 seed=0,
@@ -240,6 +287,10 @@ class FireworksPoeQRBot(PoeBot):
                     "severity": "INFO",
                     "msg": "Request completed",
                     **query.dict(),
+                    "prompt": prompt,
+                    "qr_data": qr_data,
+                    "qr_strength": qr_strength,
+                    "prompt_strength": prompt_strength,
                     "response": response_text,
                     "elapsed_sec": elapsed_sec,
                     "elapsed_sec_inference": end_t_inference - start_t,
