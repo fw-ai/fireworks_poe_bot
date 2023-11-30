@@ -48,11 +48,11 @@ def parse_input(input_string, default_qr_strength, default_prompt_strength):
             next_flag_idx = len(input_string)
 
         # Parse the flag and its arguments
-        if input_string.startswith('--qr'):
-            qr_prompt = input_string[len("--qr"):next_flag_idx].strip()
-            input_string = input_string[next_flag_idx:].strip()
-        elif input_string.startswith('--qr-strength'):
+        if input_string.startswith('--qr-strength'):
             qr_strength = float(input_string[len("--qr-strength"):next_flag_idx].strip())
+            input_string = input_string[next_flag_idx:].strip()
+        elif input_string.startswith('--qr'):
+            qr_prompt = input_string[len("--qr"):next_flag_idx].strip()
             input_string = input_string[next_flag_idx:].strip()
         elif input_string.startswith('--prompt-strength'):
             prompt_strength = int(input_string[len("--prompt-strength"):next_flag_idx].strip())
@@ -278,7 +278,8 @@ class FireworksPoeQRBot(PoeBot):
             public_image_url = self._upload_image_to_gcs(
                 answer.image, self.gcs_bucket_name
             )
-            response_text = f"![image]({public_image_url})"
+
+            response_text = f"![{prompt}]({public_image_url})"
 
             end_t = time.time()
             elapsed_sec = end_t - start_t
