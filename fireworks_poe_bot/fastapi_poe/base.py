@@ -275,6 +275,11 @@ def make_app(
             raise HTTPException(status_code=404, detail=f"Bot {bot_fqn} not found")
         return bots[bot_fqn]
 
+    @app.get("/")
+    async def index() -> Response:
+        # Default endpoint for health checks
+        return HTMLResponse("It works!")
+
     @app.get("/accounts/{account}/models/{model}")
     async def index(account: str, model: str) -> Response:
         bot = find_bot(account, model)
