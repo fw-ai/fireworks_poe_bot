@@ -29,6 +29,8 @@ dependencies = [
     "numpy",
     "google-cloud-storage",
     "qrcode",
+    "sqlalchemy",
+    "asyncpg",
 ]
 
 [project.scripts]
