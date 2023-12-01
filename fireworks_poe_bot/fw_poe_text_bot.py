@@ -27,9 +27,14 @@ import base64
 import httpx
 from PIL import Image
 
+
 class TextModelConfig(ModelConfig):
     allow_attachments: Optional[bool] = False
     input_image_size: Optional[int] = None
+    prompt_truncate_len: int = 2048
+    max_tokens: int = 4096
+    additional_args: Optional[Dict[str, int | str]] = None
+
 
 @register_bot_plugin("text_models", TextModelConfig)
 class FireworksPoeTextBot(PoeBot):
@@ -40,9 +45,12 @@ class FireworksPoeTextBot(PoeBot):
         environment: str,
         deployment: str,
         server_version: str,
+        allow_attachments: bool,
         input_image_size: int,
+        prompt_truncate_len: int,
+        max_tokens: int,
+        additional_args: Optional[Dict[str, int | str]],
         completion_async_method: Callable = ChatCompletion.acreate,
-        allow_attachments: bool = False,
     ):
         super().__init__()
         self.model = model
@@ -53,6 +61,9 @@ class FireworksPoeTextBot(PoeBot):
         self.input_image_size = input_image_size
         self.completion_async_method = completion_async_method
         self.allow_attachments = allow_attachments
+        self.prompt_truncate_len = prompt_truncate_len
+        self.max_tokens = max_tokens
+        self.additional_args = additional_args or {}
 
     def _log_warn(self, payload: Dict):
         payload = copy.copy(payload)
@@ -93,9 +104,15 @@ class FireworksPoeTextBot(PoeBot):
                 pil_img = Image.open(io.BytesIO(r.content))
                 width, height = pil_img.size
                 if width >= height:
-                    new_size = (self.input_image_size, int(height * self.input_image_size / width))
+                    new_size = (
+                        self.input_image_size,
+                        int(height * self.input_image_size / width),
+                    )
                 else:
-                    new_size = (int(width * self.input_image_size / height), self.input_image_size)
+                    new_size = (
+                        int(width * self.input_image_size / height),
+                        self.input_image_size,
+                    )
                 pil_img_resized = pil_img.resize(new_size)
                 buffered = io.BytesIO()
                 pil_img_resized.save(buffered, format="JPEG")
@@ -247,9 +264,10 @@ class FireworksPoeTextBot(PoeBot):
                 request_timeout=600,
                 temperature=query.temperature,
                 stop=query.stop_sequences[:4],
-                max_tokens=4096,  # TODO: make arg
-                prompt_truncate_len=2048,  # TODO: make arg
+                max_tokens=self.max_tokens,
+                prompt_truncate_len=self.prompt_truncate_len,
                 frequency_penalty=0.5,
+                **self.additional_args,
             ):
                 # Step 3: Transform the CompletionStreamResponse into PartialResponse format
                 for choice in response.choices:
