@@ -33,7 +33,7 @@ class TextModelConfig(ModelConfig):
     input_image_size: Optional[int] = None
     prompt_truncate_len: int = 2048
     max_tokens: int = 4096
-    additional_args: Optional[Dict[str, int | str]] = None
+    additional_args: Optional[Dict[str, int | str | float]] = None
 
 
 @register_bot_plugin("text_models", TextModelConfig)
