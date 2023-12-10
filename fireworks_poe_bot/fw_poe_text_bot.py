@@ -33,7 +33,7 @@ class TextModelConfig(ModelConfig):
     input_image_size: Optional[int] = None
     prompt_truncate_len: int = 2048
     max_tokens: int = 4096
-    additional_args: Optional[Dict[str, int | str]] = None
+    additional_args: Optional[Dict[str, int | str | float]] = None
 
 
 @register_bot_plugin("text_models", TextModelConfig)
@@ -266,7 +266,6 @@ class FireworksPoeTextBot(PoeBot):
                 stop=query.stop_sequences[:4],
                 max_tokens=self.max_tokens,
                 prompt_truncate_len=self.prompt_truncate_len,
-                frequency_penalty=0.5,
                 **self.additional_args,
             ):
                 # Step 3: Transform the CompletionStreamResponse into PartialResponse format
