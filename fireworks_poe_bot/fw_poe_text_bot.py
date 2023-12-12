@@ -273,6 +273,12 @@ class FireworksPoeTextBot(PoeBot):
         orig_api_key = fireworks.client.api_key
         fireworks.client.api_key = self.api_key
         try:
+            if "stop" in self.additional_args:
+                stop_seqs = self.additional_args["stop"]
+                self.additional_args.pop("stop")
+                self._log_info(f"Overriding stop sequences with {stop_seqs}")
+            else:
+                stop_seqs = query.stop_sequences[:4]
             generated_len = 0
             start_t = time.time()
             complete_response = ""
@@ -282,7 +288,7 @@ class FireworksPoeTextBot(PoeBot):
                 stream=True,
                 request_timeout=600,
                 temperature=query.temperature,
-                stop=query.stop_sequences[:4],
+                stop=stop_seqs,
                 max_tokens=self.max_tokens,
                 prompt_truncate_len=self.prompt_truncate_len,
                 **self.additional_args,
