@@ -211,7 +211,7 @@ class FireworksPoeTextBot(PoeBot):
                 }
                 messages.insert(0, system_prompt_msg)
 
-            system_prompt_msg.content = [
+            system_prompt_msg["content"] = [
                 {"type": "text", "text": self.system_prompt_override},
             ]
 
