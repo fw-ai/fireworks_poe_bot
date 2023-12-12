@@ -296,13 +296,13 @@ class FireworksPoeTextBot(PoeBot):
             )
             yield ServerSentEvent(event="done")
             return
-        except InvalidRequestError as e:
+        except Exception as e:
             end_t = time.time()
             log_error(
                 {
                     "severity": "ERROR",
                     "msg": "Invalid request",
-                    "error": e,
+                    "error": str(e),
                     "elapsed_sec": end_t - start_t,
                     "query": query.dict(),
                 }
