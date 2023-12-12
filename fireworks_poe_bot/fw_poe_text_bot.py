@@ -276,7 +276,6 @@ class FireworksPoeTextBot(PoeBot):
             if "stop" in self.additional_args:
                 stop_seqs = self.additional_args["stop"]
                 self.additional_args.pop("stop")
-                self._log_info(f"Overriding stop sequences with {stop_seqs}")
             else:
                 stop_seqs = query.stop_sequences[:4]
             generated_len = 0
