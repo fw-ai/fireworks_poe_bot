@@ -34,7 +34,7 @@ class TextModelConfig(ModelConfig):
     prompt_truncate_len: int = 2048
     max_tokens: int = 4096
     system_prompt_override: Optional[str] = None
-    additional_args: Optional[Dict[str, int | str | float]] = None
+    additional_args: Optional[Dict[str, int | str | float | List[str]]] = None
 
 
 @register_bot_plugin("text_models", TextModelConfig)
