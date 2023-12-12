@@ -33,6 +33,7 @@ class TextModelConfig(ModelConfig):
     input_image_size: Optional[int] = None
     prompt_truncate_len: int = 2048
     max_tokens: int = 4096
+    system_prompt_override: Optional[str] = None
     additional_args: Optional[Dict[str, int | str | float]] = None
 
 
@@ -49,6 +50,7 @@ class FireworksPoeTextBot(PoeBot):
         input_image_size: int,
         prompt_truncate_len: int,
         max_tokens: int,
+        system_prompt_override: Optional[str],
         additional_args: Optional[Dict[str, int | str]],
         completion_async_method: Callable = ChatCompletion.acreate,
     ):
@@ -63,6 +65,7 @@ class FireworksPoeTextBot(PoeBot):
         self.allow_attachments = allow_attachments
         self.prompt_truncate_len = prompt_truncate_len
         self.max_tokens = max_tokens
+        self.system_prompt_override = system_prompt_override
         self.additional_args = additional_args or {}
 
     def _log_warn(self, payload: Dict):
@@ -195,6 +198,22 @@ class FireworksPoeTextBot(PoeBot):
                 cumulative_image_size_mb += len(img_base64) / 1024 / 1024
             else:
                 messages.append({"role": role, "content": protocol_message.content})
+
+        if self.system_prompt_override is not None:
+            system_prompt_msg = None
+            for msg in messages:
+                if msg["role"] == "system":
+                    system_prompt_msg = msg
+                    break
+            if system_prompt_msg is None:
+                system_prompt_msg = {
+                    "role": "system",
+                }
+                messages.insert(0, system_prompt_msg)
+
+            system_prompt_msg.content = [
+                {"type": "text", "text": self.system_prompt_override},
+            ]
 
         self._log_info(
             {
