@@ -273,9 +273,10 @@ class FireworksPoeTextBot(PoeBot):
         orig_api_key = fireworks.client.api_key
         fireworks.client.api_key = self.api_key
         try:
-            if "stop" in self.additional_args:
-                stop_seqs = self.additional_args["stop"]
-                self.additional_args.pop("stop")
+            additional_args = copy.deepcopy(self.additional_args)
+            if "stop" in additional_args:
+                stop_seqs = additional_args["stop"]
+                additional_args.pop("stop")
             else:
                 stop_seqs = query.stop_sequences[:4]
             generated_len = 0
@@ -290,7 +291,7 @@ class FireworksPoeTextBot(PoeBot):
                 stop=stop_seqs,
                 max_tokens=self.max_tokens,
                 prompt_truncate_len=self.prompt_truncate_len,
-                **self.additional_args,
+                **additional_args,
             ):
                 # Step 3: Transform the CompletionStreamResponse into PartialResponse format
                 for choice in response.choices:
