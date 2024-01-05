@@ -28,6 +28,7 @@ import uuid
 import requests
 from google.cloud import storage
 import qrcode
+import traceback
 
 def parse_input(input_string, default_qr_strength, default_prompt_strength):
     # Parse initial prompt
@@ -167,71 +168,71 @@ class FireworksPoeQRBot(PoeBot):
     async def get_response(
         self, query: QueryRequest
     ) -> AsyncIterable[Union[PartialResponse, ServerSentEvent]]:
-        if len(query.query) == 0:
-            yield ErrorResponse(allow_retry=False, text="Empty query")
-            raise
-
-        messages: List[ChatMessage] = []
-
-        for protocol_message in query.query:
-            # OpenAI/Fireworks use the "assistant" role for the LLM, but Poe uses the
-            # "bot" role. Replace that one. Otherwise, ignore the role
-            if protocol_message.role not in {"system", "user", "bot"}:
-                self._log_warn({"msg": "Unknown role", **protocol_message})
-                continue
-            if protocol_message.content_type not in {"text/plain", "text/markdown"}:
-                self._log_warn({"msg": "Unknown content type", **protocol_message})
-                continue
-            # TODO: support protocol_message.feedback and protocol_message.attachments
-            # if needed
-            if protocol_message.role == "bot":
-                role = "assistant"
-            else:
-                role = protocol_message.role
-            messages.append({"role": role, "content": protocol_message.content})
-
-        self._log_info(
-            {
-                "msg": "Request received",
-                **query.dict(),
-            }
-        )
-
-        # The poe servers send us arbitrary lists of messages. We need to do a few things
-        # to normalize for our chat completion API:
-        # 1. Ensure that all assistant messages are preceded by a user message
-        # 2. Merge adjacent messages from the same role
-        # 3. Ensure that the last message is a user message
-
-        # Ensure that all assistant messages are preceded by a user message
-        for i in range(len(messages) - 1, -1, -1):
-            if messages[i]["role"] == "assistant" and (
-                i == 0 or messages[i - 1]["role"] != "user"
-            ):
-                self._log_warn(
-                    {
-                        "msg": f"Assistant message {messages[i]} not preceded by user message"
-                    }
-                )
-                messages.insert(i, {"role": "user", "content": ""})
-
-        # Merge adjacent messages from the same role
-        merged_messages = []
-
-        for role, group in groupby(messages, key=lambda x: x["role"]):
-            content = " ".join(message["content"] for message in group)
-            merged_messages.append({"role": role, "content": content})
-
-        messages = merged_messages
-
-        # Ensure last message is a user message
-        if messages[-1]["role"] != "user":
-            self._log_warn({"msg": f"Last message {messages[-1]} not a user message"})
-            messages.append({"role": "user", "content": ""})
-
         orig_api_key = self.client.api_key
         fireworks.client.api_key = self.api_key
         try:
+            if len(query.query) == 0:
+                yield ErrorResponse(allow_retry=False, text="Empty query")
+                raise
+
+            messages: List[ChatMessage] = []
+
+            for protocol_message in query.query:
+                # OpenAI/Fireworks use the "assistant" role for the LLM, but Poe uses the
+                # "bot" role. Replace that one. Otherwise, ignore the role
+                if protocol_message.role not in {"system", "user", "bot"}:
+                    self._log_warn({"msg": "Unknown role", **protocol_message})
+                    continue
+                if protocol_message.content_type not in {"text/plain", "text/markdown"}:
+                    self._log_warn({"msg": "Unknown content type", **protocol_message})
+                    continue
+                # TODO: support protocol_message.feedback and protocol_message.attachments
+                # if needed
+                if protocol_message.role == "bot":
+                    role = "assistant"
+                else:
+                    role = protocol_message.role
+                messages.append({"role": role, "content": protocol_message.content})
+
+            self._log_info(
+                {
+                    "msg": "Request received",
+                    **query.dict(),
+                }
+            )
+
+            # The poe servers send us arbitrary lists of messages. We need to do a few things
+            # to normalize for our chat completion API:
+            # 1. Ensure that all assistant messages are preceded by a user message
+            # 2. Merge adjacent messages from the same role
+            # 3. Ensure that the last message is a user message
+
+            # Ensure that all assistant messages are preceded by a user message
+            for i in range(len(messages) - 1, -1, -1):
+                if messages[i]["role"] == "assistant" and (
+                    i == 0 or messages[i - 1]["role"] != "user"
+                ):
+                    self._log_warn(
+                        {
+                            "msg": f"Assistant message {messages[i]} not preceded by user message"
+                        }
+                    )
+                    messages.insert(i, {"role": "user", "content": ""})
+
+            # Merge adjacent messages from the same role
+            merged_messages = []
+
+            for role, group in groupby(messages, key=lambda x: x["role"]):
+                content = " ".join(message["content"] for message in group)
+                merged_messages.append({"role": role, "content": content})
+
+            messages = merged_messages
+
+            # Ensure last message is a user message
+            if messages[-1]["role"] != "user":
+                self._log_warn({"msg": f"Last message {messages[-1]} not a user message"})
+                messages.append({"role": "user", "content": ""})
+
             # generated_len = 0
             start_t = time.time()
 
@@ -307,7 +308,7 @@ class FireworksPoeQRBot(PoeBot):
                 {
                     "severity": "ERROR",
                     "msg": "Invalid request",
-                    "error": str(e),
+                    "error": "\n".join(traceback.format_exception(e)),
                     "elapsed_sec": end_t - start_t,
                     **query.dict(),
                 }
