@@ -33,6 +33,7 @@ import traceback
 
 class ImageModelConfig(ModelConfig):
     gcs_bucket_name: str
+    multi_turn: bool = True
 
 @register_bot_plugin("image_models", ImageModelConfig)
 class FireworksPoeImageBot(PoeBot):
@@ -44,6 +45,7 @@ class FireworksPoeImageBot(PoeBot):
         deployment: str,
         server_version: str,
         gcs_bucket_name: str,
+        multi_turn: bool
     ):
         super().__init__()
         self.model = model
@@ -69,6 +71,7 @@ class FireworksPoeImageBot(PoeBot):
         self.client = ImageInference(account=self.account, model=self.model)
 
         self.gcs_bucket_name = gcs_bucket_name
+        self.multi_turn = multi_turn
 
     def _log_warn(self, payload: Dict):
         payload = copy.copy(payload)
@@ -180,7 +183,7 @@ class FireworksPoeImageBot(PoeBot):
                 ):
                     control_img_uri = messages["content"][9:-1]
 
-            if control_img_uri is None:
+            if not self.multi_turn or control_img_uri is None:
                 answer: Answer = await self.client.text_to_image_async(
                     prompt=prompt,
                     cfg_scale=7,
