@@ -102,6 +102,8 @@ class FireworksPoeImageBot(PoeBot):
         orig_api_key = self.client.api_key
         fireworks.client.api_key = self.api_key
         try:
+            start_t = time.time()
+
             if len(query.query) == 0:
                 yield ErrorResponse(allow_retry=False, text="Empty query")
                 return
@@ -165,7 +167,6 @@ class FireworksPoeImageBot(PoeBot):
                 messages.append({"role": "user", "content": ""})
 
             # generated_len = 0
-            start_t = time.time()
 
             assert messages[-1]["role"] == "user"
             prompt = messages[-1]["content"]
