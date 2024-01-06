@@ -26,6 +26,7 @@ import io
 import base64
 import httpx
 from PIL import Image
+import traceback
 
 
 class TextModelConfig(ModelConfig):
@@ -35,6 +36,8 @@ class TextModelConfig(ModelConfig):
     max_tokens: int = 4096
     system_prompt_override: Optional[str] = None
     additional_args: Optional[Dict[str, int | str | float | List[str]]] = None
+    # "alpaca" or None
+    chat_format: Optional[str] = None
 
 
 @register_bot_plugin("text_models", TextModelConfig)
@@ -52,6 +55,7 @@ class FireworksPoeTextBot(PoeBot):
         max_tokens: int,
         system_prompt_override: Optional[str],
         additional_args: Optional[Dict[str, int | str]],
+        chat_format: Optional[str],
         completion_async_method: Callable = ChatCompletion.acreate,
     ):
         super().__init__()
@@ -65,6 +69,7 @@ class FireworksPoeTextBot(PoeBot):
         self.allow_attachments = allow_attachments
         self.prompt_truncate_len = prompt_truncate_len
         self.max_tokens = max_tokens
+        self.chat_format = chat_format
         self.system_prompt_override = system_prompt_override
         self.additional_args = additional_args or {}
 
@@ -105,6 +110,7 @@ class FireworksPoeTextBot(PoeBot):
             if r.status_code == 200:
                 resize_encode_start = time.perf_counter()
                 pil_img = Image.open(io.BytesIO(r.content))
+                pil_img = pil_img.convert("RGB")
                 width, height = pil_img.size
                 if width >= height:
                     new_size = (
@@ -145,134 +151,154 @@ class FireworksPoeTextBot(PoeBot):
             yield ErrorResponse(allow_retry=False, text="Empty query")
             return
 
-        messages: List[ChatMessage] = []
-
-        cumulative_image_size_mb = 0
-        for protocol_message in query.query:
-            log_msg = protocol_message.dict()
-
-            # OpenAI/Fireworks use the "assistant" role for the LLM, but Poe uses the
-            # "bot" role. Replace that one. Otherwise, ignore the role
-            if protocol_message.role not in {"system", "user", "bot"}:
-                self._log_warn({"msg": "Unknown role", **log_msg})
-                continue
-            if protocol_message.content_type not in {"text/plain", "text/markdown"}:
-                self._log_warn({"msg": "Unknown content type", **log_msg})
-                continue
-            # TODO: support protocol_message.feedback and protocol_message.attachments
-            # if needed
-            img_base64 = None
-            if protocol_message.role == "bot":
-                role = "assistant"
-            else:
-                role = protocol_message.role
-                if protocol_message.attachments and protocol_message.attachments[
-                    0
-                ].content_type in ["image/png", "image/jpeg"]:
-                    try:
-                        img_base64 = await self.download_image_and_encode_to_base64(
-                            protocol_message.attachments[0].url
-                        )
-                    except Exception as e:
-                        yield ErrorResponse(allow_retry=False, text=str(e))
-                        return
-
-            if img_base64:
-                if cumulative_image_size_mb > 8:
-                    # Apigee has a limit of 10MB for payload, we set image total limit to 8MB
-                    yield ErrorResponse(
-                        allow_retry=False, text="The total image size is too big"
-                    )
-                messages.append(
-                    {
-                        "role": role,
-                        "content": [
-                            {"type": "text", "text": protocol_message.content},
-                            {
-                                "type": "image_url",
-                                "image_url": {"url": img_base64},
-                            },
-                        ],
-                    }
-                )
-                cumulative_image_size_mb += len(img_base64) / 1024 / 1024
-            else:
-                messages.append({"role": role, "content": protocol_message.content})
-
-        if self.system_prompt_override is not None:
-            system_prompt_msg = None
-            for msg in messages:
-                if msg["role"] == "system":
-                    system_prompt_msg = msg
-                    break
-            if system_prompt_msg is None:
-                system_prompt_msg = {
-                    "role": "system",
-                }
-                messages.insert(0, system_prompt_msg)
-
-            system_prompt_msg["content"] = [
-                {"type": "text", "text": self.system_prompt_override},
-            ]
-
-        self._log_info(
-            {
-                "msg": "Request received",
-                **query.dict(),
-            }
-        )
-        # The poe servers send us arbitrary lists of messages. We need to do a few things
-        # to normalize for our chat completion API:
-        # 1. Ensure that all assistant messages are preceded by a user message
-        # 2. Merge adjacent messages from the same role
-        # 3. Ensure that the last message is a user message
-
-        # Ensure that all assistant messages are preceded by a user message
-        for i in range(len(messages) - 1, -1, -1):
-            if messages[i]["role"] == "assistant" and (
-                i == 0 or messages[i - 1]["role"] != "user"
-            ):
-                self._log_warn(
-                    {
-                        "msg": f"Assistant message {messages[i]} not preceded by user message"
-                    }
-                )
-                messages.insert(i, {"role": "user", "content": ""})
-
-        # Merge adjacent messages from the same role
-        merged_messages = []
-
-        # Now there could be images in the messages, in which case the message content is a list
-        def merge_messages_groups(
-            message_group: List[Union[str, List[Dict[str, Any]]]]
-        ) -> Union[str, List[Dict[str, Any]]]:
-            text = []
-            images = []
-            for msg in message_group:
-                if isinstance(msg, str):
-                    text.append(msg)
-                elif isinstance(msg, list):
-                    assert msg[0]["type"] == "text"
-                    text.append(msg[0]["text"])
-                    images.extend(msg[1:])
-            if images:
-                return [{"type": "text", "text": " ".join(text)}, *images]
-            return " ".join(text)
-
-        for role, group in groupby(messages, key=lambda x: x["role"]):
-            content = merge_messages_groups([message["content"] for message in group])
-            merged_messages.append({"role": role, "content": content})
-
-        messages = merged_messages
-
-        # Ensure last message is a user message
-        if messages[-1]["role"] != "user":
-            self._log_warn({"msg": f"Last message {messages[-1]} not a user message"})
-            messages.append({"role": "user", "content": ""})
-
         orig_api_key = fireworks.client.api_key
         fireworks.client.api_key = self.api_key
         try:
+            start_t = time.time()
+            messages: List[ChatMessage] = []
+
+            cumulative_image_size_mb = 0
+            for protocol_message in query.query:
+                log_msg = protocol_message.dict()
+
+                # OpenAI/Fireworks use the "assistant" role for the LLM, but Poe uses the
+                # "bot" role. Replace that one. Otherwise, ignore the role
+                if protocol_message.role not in {"system", "user", "bot"}:
+                    self._log_warn({"msg": "Unknown role", **log_msg})
+                    continue
+                if protocol_message.content_type not in {"text/plain", "text/markdown"}:
+                    self._log_warn({"msg": "Unknown content type", **log_msg})
+                    continue
+                # TODO: support protocol_message.feedback and protocol_message.attachments
+                # if needed
+                img_base64 = None
+                if protocol_message.role == "bot":
+                    role = "assistant"
+                else:
+                    role = protocol_message.role
+                    if protocol_message.attachments and protocol_message.attachments[
+                        0
+                    ].content_type in ["image/png", "image/jpeg"]:
+                        try:
+                            img_base64 = await self.download_image_and_encode_to_base64(
+                                protocol_message.attachments[0].url
+                            )
+                        except Exception as e:
+                            yield ErrorResponse(allow_retry=False, text=str(e))
+                            raise RuntimeError(str(e))
+
+                if img_base64:
+                    if cumulative_image_size_mb > 8:
+                        # Apigee has a limit of 10MB for payload, we set image total limit to 8MB
+                        yield ErrorResponse(
+                            allow_retry=False, text="The total image size is too big"
+                        )
+                        raise RuntimeError("The total image size is too big")
+                    messages.append(
+                        {
+                            "role": role,
+                            "content": [
+                                {"type": "text", "text": protocol_message.content},
+                                {
+                                    "type": "image_url",
+                                    "image_url": {"url": img_base64},
+                                },
+                            ],
+                        }
+                    )
+                    cumulative_image_size_mb += len(img_base64) / 1024 / 1024
+                else:
+                    messages.append({"role": role, "content": protocol_message.content})
+
+            if self.system_prompt_override is not None:
+                system_prompt_msg = None
+                for msg in messages:
+                    if msg["role"] == "system":
+                        system_prompt_msg = msg
+                        break
+                if system_prompt_msg is None:
+                    system_prompt_msg = {
+                        "role": "system",
+                    }
+                    messages.insert(0, system_prompt_msg)
+
+                system_prompt_msg["content"] = [
+                    {"type": "text", "text": self.system_prompt_override},
+                ]
+
+            if self.chat_format == "alpaca":
+                # Discard all messages except "system" and the last "user"
+                # message
+                system_message = None
+                user_message = None
+                for msg in messages:
+                    if msg["role"] == "system":
+                        system_message = msg
+                    elif msg["role"] == "user":
+                        user_message = msg
+
+                new_messages = []
+                if system_message is not None:
+                    new_messages.append(system_message)
+                if user_message is not None:
+                    new_messages.append(user_message)
+                messages = new_messages
+
+            self._log_info(
+                {
+                    "msg": "Request received",
+                    **query.dict(),
+                }
+            )
+            # The poe servers send us arbitrary lists of messages. We need to do a few things
+            # to normalize for our chat completion API:
+            # 1. Ensure that all assistant messages are preceded by a user message
+            # 2. Merge adjacent messages from the same role
+            # 3. Ensure that the last message is a user message
+
+            # Ensure that all assistant messages are preceded by a user message
+            for i in range(len(messages) - 1, -1, -1):
+                if messages[i]["role"] == "assistant" and (
+                    i == 0 or messages[i - 1]["role"] != "user"
+                ):
+                    self._log_warn(
+                        {
+                            "msg": f"Assistant message {messages[i]} not preceded by user message"
+                        }
+                    )
+                    messages.insert(i, {"role": "user", "content": ""})
+
+            # Merge adjacent messages from the same role
+            merged_messages = []
+
+            # Now there could be images in the messages, in which case the message content is a list
+            def merge_messages_groups(
+                message_group: List[Union[str, List[Dict[str, Any]]]]
+            ) -> Union[str, List[Dict[str, Any]]]:
+                text = []
+                images = []
+                for msg in message_group:
+                    if isinstance(msg, str):
+                        text.append(msg)
+                    elif isinstance(msg, list):
+                        assert msg[0]["type"] == "text"
+                        text.append(msg[0]["text"])
+                        images.extend(msg[1:])
+                if images:
+                    return [{"type": "text", "text": " ".join(text)}, *images]
+                return " ".join(text)
+
+            for role, group in groupby(messages, key=lambda x: x["role"]):
+                content = merge_messages_groups([message["content"] for message in group])
+                merged_messages.append({"role": role, "content": content})
+
+            messages = merged_messages
+
+            # Ensure last message is a user message
+            if messages[-1]["role"] != "user":
+                self._log_warn({"msg": f"Last message {messages[-1]} not a user message"})
+                messages.append({"role": "user", "content": ""})
+
             additional_args = copy.deepcopy(self.additional_args)
             if "stop" in additional_args:
                 stop_seqs = additional_args["stop"]
@@ -280,7 +306,6 @@ class FireworksPoeTextBot(PoeBot):
             else:
                 stop_seqs = query.stop_sequences[:4]
             generated_len = 0
-            start_t = time.time()
             complete_response = ""
             async for response in self.completion_async_method(
                 model=self.model,
@@ -327,7 +352,7 @@ class FireworksPoeTextBot(PoeBot):
                 {
                     "severity": "ERROR",
                     "msg": "Invalid request",
-                    "error": str(e),
+                    "error": "\n".join(traceback.format_exception(e)),
                     "elapsed_sec": end_t - start_t,
                     "query": query.dict(),
                 }
