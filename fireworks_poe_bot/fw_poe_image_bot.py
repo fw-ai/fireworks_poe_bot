@@ -1,7 +1,7 @@
 import base64
 import copy
 import io
-from typing import AsyncIterable, Dict, List, Union
+from typing import AsyncIterable, Dict, List, Optional, Union
 from .fastapi_poe import PoeBot
 from sse_starlette.sse import ServerSentEvent
 from .fastapi_poe.types import (
@@ -33,6 +33,7 @@ import traceback
 
 class ImageModelConfig(ModelConfig):
     gcs_bucket_name: str
+    num_steps: int = 25
     multi_turn: bool = True
 
 @register_bot_plugin("image_models", ImageModelConfig)
@@ -45,6 +46,7 @@ class FireworksPoeImageBot(PoeBot):
         deployment: str,
         server_version: str,
         gcs_bucket_name: str,
+        num_steps: int,
         multi_turn: bool
     ):
         super().__init__()
@@ -69,6 +71,8 @@ class FireworksPoeImageBot(PoeBot):
         self.model = model_atoms[3]
 
         self.client = ImageInference(account=self.account, model=self.model)
+
+        self.num_steps = num_steps
 
         self.gcs_bucket_name = gcs_bucket_name
         self.multi_turn = multi_turn
@@ -190,7 +194,7 @@ class FireworksPoeImageBot(PoeBot):
                     height=1024,
                     width=1024,
                     sampler=None,
-                    steps=25,
+                    steps=self.num_steps,
                     seed=0,
                     safety_check=True,
                     output_image_format="JPG",
@@ -212,7 +216,7 @@ class FireworksPoeImageBot(PoeBot):
                     prompt=prompt,
                     cfg_scale=7,
                     sampler=None,
-                    steps=25,
+                    steps=self.num_steps,
                     seed=0,
                     safety_check=True,
                     output_image_format="JPG",
