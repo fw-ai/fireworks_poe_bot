@@ -1,11 +1,12 @@
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing_extensions import Literal, TypeAlias
 
 Identifier: TypeAlias = str
 FeedbackType: TypeAlias = Literal["like", "dislike"]
 ContentType: TypeAlias = Literal["text/markdown", "text/plain"]
+ErrorType: TypeAlias = Literal["user_message_too_long"]
 
 
 class MessageFeedback(BaseModel):
@@ -77,6 +78,8 @@ class ReportErrorRequest(BaseRequest):
 
 
 class SettingsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     context_clear_window_secs: Optional[int] = None  # deprecated
     allow_user_context_clear: bool = True  # deprecated
     server_bot_dependencies: Dict[str, int] = Field(default_factory=dict)
@@ -84,8 +87,16 @@ class SettingsResponse(BaseModel):
     introduction_message: str = ""
 
 
+class AttachmentUploadResponse(BaseModel):
+    inline_ref: Optional[str]
+
+
 class PartialResponse(BaseModel):
     """Representation of a (possibly partial) response from a bot."""
+
+    # These objects are usually instantiated in user code, so we
+    # disallow extra fields to prevent mistakes.
+    model_config = ConfigDict(extra="forbid")
 
     text: str
     """Partial response text.
@@ -95,6 +106,9 @@ class PartialResponse(BaseModel):
     PartialResponse(text="B"), PartialResponse(text="C").
 
     """
+
+    data: Optional[Dict[str, Any]] = None
+    """Used when a bot returns the json event."""
 
     raw_response: object = None
     """For debugging, the raw response from the bot."""
@@ -116,6 +130,7 @@ class ErrorResponse(PartialResponse):
     """Communicate errors from server bots."""
 
     allow_retry: bool = False
+    error_type: Optional[ErrorType] = None
 
 
 class MetaResponse(PartialResponse):
@@ -125,3 +140,35 @@ class MetaResponse(PartialResponse):
     suggested_replies: bool = True
     content_type: ContentType = "text/markdown"
     refetch_settings: bool = False
+
+
+class ToolDefinition(BaseModel):
+    class FunctionDefinition(BaseModel):
+        class ParametersDefinition(BaseModel):
+            type: str
+            properties: Dict[str, object]
+            required: Optional[List[str]] = None
+
+        name: str
+        description: str
+        parameters: ParametersDefinition
+
+    type: str
+    function: FunctionDefinition
+
+
+class ToolCallDefinition(BaseModel):
+    class FunctionDefinition(BaseModel):
+        name: str
+        arguments: str
+
+    id: str
+    type: str
+    function: FunctionDefinition
+
+
+class ToolResultDefinition(BaseModel):
+    role: str
+    name: str
+    tool_call_id: str
+    content: str

@@ -1,12 +1,14 @@
 import argparse
+import asyncio
 import copy
 import json
 import logging
 import os
 import sys
 import warnings
-from typing import Any, AsyncIterable, Dict, Optional, Union
+from typing import Any, AsyncIterable, BinaryIO, Dict, Optional, Union
 
+import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -14,9 +16,11 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sse_starlette.sse import EventSourceResponse, ServerSentEvent
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from .types import (
+from fastapi_poe.types import (
+    AttachmentUploadResponse,
     ContentType,
     ErrorResponse,
+    Identifier,
     MetaResponse,
     PartialResponse,
     QueryRequest,
@@ -27,6 +31,14 @@ from .types import (
 )
 
 logger = logging.getLogger("uvicorn.default")
+
+
+class InvalidParameterError(Exception):
+    pass
+
+
+class AttachmentUploadError(Exception):
+    pass
 
 
 class LoggingMiddleware(BaseHTTPMiddleware):
@@ -62,7 +74,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         return response
 
 
-def exception_handler(request: Request, ex: HTTPException):
+async def http_exception_handler(request, ex):
     logger.error(ex)
 
 
@@ -84,9 +96,8 @@ def auth_user(
 
 class PoeBot:
     # Override these for your bot
-
     async def get_response(
-        self, query: QueryRequest
+        self, request: QueryRequest
     ) -> AsyncIterable[Union[PartialResponse, ServerSentEvent]]:
         """Override this to return a response to user queries."""
         yield self.text_event("hello")
@@ -104,6 +115,108 @@ class PoeBot:
         logger.error(f"Error from Poe server: {error_request}")
 
     # Helpers for generating responses
+    def __init__(self):
+        self._pending_file_attachment_tasks = {}
+
+    async def post_message_attachment(
+        self,
+        access_key: str,
+        message_id: Identifier,
+        *,
+        download_url: Optional[str] = None,
+        file_data: Optional[Union[bytes, BinaryIO]] = None,
+        filename: Optional[str] = None,
+        content_type: Optional[str] = None,
+        is_inline: bool = False,
+    ) -> AttachmentUploadResponse:
+        task = asyncio.create_task(
+            self._make_file_attachment_request(
+                access_key=access_key,
+                message_id=message_id,
+                download_url=download_url,
+                file_data=file_data,
+                filename=filename,
+                content_type=content_type,
+                is_inline=is_inline,
+            )
+        )
+        pending_tasks_for_message = self._pending_file_attachment_tasks.get(message_id)
+        if pending_tasks_for_message is None:
+            pending_tasks_for_message = set()
+            self._pending_file_attachment_tasks[message_id] = pending_tasks_for_message
+        pending_tasks_for_message.add(task)
+        try:
+            return await task
+        finally:
+            pending_tasks_for_message.remove(task)
+
+    async def _make_file_attachment_request(
+        self,
+        access_key: str,
+        message_id: Identifier,
+        *,
+        download_url: Optional[str] = None,
+        file_data: Optional[Union[bytes, BinaryIO]] = None,
+        filename: Optional[str] = None,
+        content_type: Optional[str] = None,
+        is_inline: bool = False,
+    ) -> AttachmentUploadResponse:
+        url = "https://www.quora.com/poe_api/file_attachment_3RD_PARTY_POST"
+
+        async with httpx.AsyncClient(timeout=120) as client:
+            try:
+                headers = {"Authorization": f"{access_key}"}
+                if download_url:
+                    if file_data or filename:
+                        raise InvalidParameterError(
+                            "Cannot provide filename or file_data if download_url is provided."
+                        )
+                    data = {
+                        "message_id": message_id,
+                        "is_inline": is_inline,
+                        "download_url": download_url,
+                    }
+                    request = httpx.Request("POST", url, data=data, headers=headers)
+                elif file_data and filename:
+                    data = {"message_id": message_id, "is_inline": is_inline}
+                    files = {
+                        "file": (
+                            (filename, file_data)
+                            if content_type is None
+                            else (filename, file_data, content_type)
+                        )
+                    }
+                    request = httpx.Request(
+                        "POST", url, files=files, data=data, headers=headers
+                    )
+                else:
+                    raise InvalidParameterError(
+                        "Must provide either download_url or file_data and filename."
+                    )
+                response = await client.send(request)
+
+                if response.status_code != 200:
+                    raise AttachmentUploadError(
+                        f"{response.status_code}: {response.reason_phrase}"
+                    )
+
+                return AttachmentUploadResponse(
+                    inline_ref=response.json().get("inline_ref")
+                )
+
+            except httpx.HTTPError:
+                logger.error("An HTTP error occurred when attempting to attach file")
+                raise
+
+    async def _process_pending_attachment_requests(self, message_id):
+        try:
+            await asyncio.gather(
+                *self._pending_file_attachment_tasks.pop(message_id, [])
+            )
+        except Exception:
+            logger.error("Error processing pending attachment requests")
+            raise
+
     @staticmethod
     def text_event(text: str) -> ServerSentEvent:
         return ServerSentEvent(data=json.dumps({"text": text}), event="text")
@@ -128,7 +241,7 @@ class PoeBot:
         content_type: ContentType = "text/markdown",
         refetch_settings: bool = False,
         linkify: bool = True,
-        suggested_replies: bool = True,
+        suggested_replies: bool = False,
     ) -> ServerSentEvent:
         return ServerSentEvent(
             data=json.dumps(
@@ -144,11 +257,16 @@ class PoeBot:
 
     @staticmethod
     def error_event(
-        text: Optional[str] = None, *, allow_retry: bool = True
+        text: Optional[str] = None,
+        *,
+        allow_retry: bool = True,
+        error_type: Optional[str] = None,
     ) -> ServerSentEvent:
         data: Dict[str, Union[bool, str]] = {"allow_retry": allow_retry}
         if text is not None:
             data["text"] = text
+        if error_type is not None:
+            data["error_type"] = error_type
         return ServerSentEvent(data=json.dumps(data), event="error")
 
     # Internal handlers
@@ -169,13 +287,19 @@ class PoeBot:
         settings = await self.get_settings(settings_request)
         return JSONResponse(settings.dict())
 
-    async def handle_query(self, query: QueryRequest) -> AsyncIterable[ServerSentEvent]:
+    async def handle_query(
+        self, request: QueryRequest
+    ) -> AsyncIterable[ServerSentEvent]:
         try:
-            async for event in self.get_response(query):
+            async for event in self.get_response(request):
                 if isinstance(event, ServerSentEvent):
                     yield event
                 elif isinstance(event, ErrorResponse):
-                    yield self.error_event(event.text, allow_retry=event.allow_retry)
+                    yield self.error_event(
+                        event.text,
+                        allow_retry=event.allow_retry,
+                        error_type=event.error_type,
+                    )
                 elif isinstance(event, MetaResponse):
                     yield self.meta_event(
                         content_type=event.content_type,
@@ -191,6 +315,11 @@ class PoeBot:
                     yield self.text_event(event.text)
         except Exception as e:
             logger.exception("Error responding to query")
+            yield self.error_event(repr(e), allow_retry=False)
+        try:
+            await self._process_pending_attachment_requests(request.message_id)
+        except Exception as e:
+            logger.exception("Error processing pending attachment requests")
             yield self.error_event(repr(e), allow_retry=False)
         yield self.done_event()
 
@@ -262,7 +391,6 @@ def make_app(
 ) -> FastAPI:
     """Create an app object. Arguments are as for run()."""
     app = FastAPI()
-    app.add_exception_handler(RequestValidationError, exception_handler)
 
     global auth_key
     auth_key = _verify_access_key(

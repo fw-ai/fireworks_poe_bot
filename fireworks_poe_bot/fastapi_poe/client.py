@@ -1,6 +1,6 @@
 """
 
-Client for talking to other Poe bots through the Poe third party bot API.
+Client for talking to other Poe bots through the Poe bot query API.
 For more details, see: https://developer.poe.com/server-bots/accessing-other-bots-on-poe
 
 """
@@ -19,8 +19,12 @@ from .types import (
     Identifier,
     MetaResponse as MetaMessage,
     PartialResponse as BotMessage,
+    ProtocolMessage,
     QueryRequest,
     SettingsResponse,
+    ToolCallDefinition,
+    ToolDefinition,
+    ToolResultDefinition,
 )
 
 PROTOCOL_VERSION = "1.0"
@@ -55,16 +59,16 @@ def _safe_ellipsis(obj: object, limit: int) -> str:
 @dataclass
 class _BotContext:
     endpoint: str
-    access_key: str = field(repr=False)
     session: httpx.AsyncClient = field(repr=False)
+    api_key: Optional[str] = field(default=None, repr=False)
     on_error: Optional[ErrorHandler] = field(default=None, repr=False)
 
     @property
     def headers(self) -> Dict[str, str]:
-        return {
-            "Accept": "application/json",
-            "Authorization": f"Bearer {self.access_key}",
-        }
+        headers = {"Accept": "application/json"}
+        if self.api_key is not None:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        return headers
 
     async def report_error(
         self, message: str, metadata: Optional[Dict[str, Any]] = None
@@ -118,29 +122,31 @@ class _BotContext:
         return resp.json()
 
     async def perform_query_request(
-        self, request: QueryRequest
+        self,
+        *,
+        request: QueryRequest,
+        tools: List[ToolDefinition],
+        tool_calls: List[ToolCallDefinition],
+        tool_results: List[ToolResultDefinition],
     ) -> AsyncGenerator[BotMessage, None]:
         chunks: List[str] = []
         message_id = request.message_id
         event_count = 0
         error_reported = False
+        payload = request.model_dump()
+        payload["tools"] = [tool.model_dump() for tool in tools]
+        payload["tool_calls"] = [tool_call.model_dump() for tool_call in tool_calls]
+        payload["tool_results"] = [
+            tool_result.model_dump() for tool_result in tool_results
+        ]
         async with httpx_sse.aconnect_sse(
-            self.session,
-            "POST",
-            self.endpoint,
-            headers=self.headers,
-            json=request.dict(),
+            self.session, "POST", self.endpoint, headers=self.headers, json=payload
         ) as event_source:
             async for event in event_source.aiter_sse():
                 event_count += 1
-                if event_count > MAX_EVENT_COUNT:
-                    await self.report_error(
-                        "Bot returned too many events", {"message_id": message_id}
-                    )
-                    raise BotErrorNoRetry("Bot returned too many events")
                 if event.event == "done":
                     # Don't send a report if we already told the bot about some other mistake.
-                    if not chunks and not error_reported:
+                    if not chunks and not error_reported and not tools:
                         await self.report_error(
                             "Bot returned no text in response",
                             {"message_id": message_id},
@@ -164,6 +170,11 @@ class _BotContext:
                         raw_response={"type": event.event, "text": event.data},
                         full_prompt=repr(request),
                         is_suggested_reply=True,
+                    )
+                    continue
+                elif event.event == "json":
+                    yield BotMessage(
+                        text="", data=json.loads(event.data), full_prompt=repr(request)
                     )
                     continue
                 elif event.event == "meta":
@@ -229,13 +240,6 @@ class _BotContext:
                     error_reported = True
                     continue
                 chunks.append(text)
-                total_length = sum(len(chunk) for chunk in chunks)
-                if total_length > MESSAGE_LENGTH_LIMIT:
-                    await self.report_error(
-                        "Bot returned too much text",
-                        {"message_id": message_id, "response_length": total_length},
-                    )
-                    raise BotErrorNoRetry("Bot returned too much text")
                 yield BotMessage(
                     text=text,
                     raw_response={"type": event.event, "text": event.data},
@@ -281,43 +285,179 @@ class _BotContext:
 
 
 def _default_error_handler(e: Exception, msg: str) -> None:
-    print("Error in Poe bot:", msg, e)
+    print("Error in Poe bot:", msg, "\n", repr(e))
 
 
 async def stream_request(
     request: QueryRequest,
     bot_name: str,
-    access_key: str = "",
-    *,
     api_key: str = "",
-    api_key_deprecation_warning_stacklevel: int = 2,
+    *,
+    tools: Optional[List[ToolDefinition]] = None,
+    tool_executables: Optional[List[Callable]] = None,
+    access_key: str = "",
+    access_key_deprecation_warning_stacklevel: int = 2,
     session: Optional[httpx.AsyncClient] = None,
     on_error: ErrorHandler = _default_error_handler,
     num_tries: int = 2,
     retry_sleep_time: float = 0.5,
     base_url: str = "https://api.poe.com/bot/",
 ) -> AsyncGenerator[BotMessage, None]:
-    """Streams BotMessages from a Poe bot."""
-    if api_key != "":
-        warnings.warn(
-            "the api_key param is deprecated, pass your key using access_key instead",
-            DeprecationWarning,
-            stacklevel=api_key_deprecation_warning_stacklevel,
+    tool_calls = None
+    tool_results = None
+    if tools is not None:
+        assert tool_executables is not None
+        tool_calls = await _get_tool_calls(
+            request=request,
+            bot_name=bot_name,
+            api_key=api_key,
+            tools=tools,
+            access_key=access_key,
+            access_key_deprecation_warning_stacklevel=access_key_deprecation_warning_stacklevel,
+            session=session,
+            on_error=on_error,
+            num_tries=num_tries,
+            retry_sleep_time=retry_sleep_time,
+            base_url=base_url,
         )
-        if access_key == "":
-            access_key = api_key
+        tool_results = _get_tool_results(
+            tool_executables=tool_executables, tool_calls=tool_calls
+        )
+    async for message in stream_request_base(
+        request=request,
+        bot_name=bot_name,
+        api_key=api_key,
+        tools=tools,
+        tool_calls=tool_calls,
+        tool_results=tool_results,
+        access_key=access_key,
+        access_key_deprecation_warning_stacklevel=access_key_deprecation_warning_stacklevel,
+        session=session,
+        on_error=on_error,
+        num_tries=num_tries,
+        retry_sleep_time=retry_sleep_time,
+        base_url=base_url,
+    ):
+        yield message
+
+
+def _get_tool_results(
+    tool_executables: List[Callable], tool_calls: List[ToolCallDefinition]
+) -> List[ToolResultDefinition]:
+    tool_executables_dict = {
+        executable.__name__: executable for executable in tool_executables
+    }
+    tool_results = []
+    for tool_call in tool_calls:
+        tool_call_id = tool_call.id
+        name = tool_call.function.name
+        arguments = json.loads(tool_call.function.arguments)
+        content = tool_executables_dict[name](**arguments)
+        tool_results.append(
+            ToolResultDefinition(
+                role="tool",
+                tool_call_id=tool_call_id,
+                name=name,
+                content=json.dumps(content),
+            )
+        )
+    return tool_results
+
+
+async def _get_tool_calls(
+    request: QueryRequest,
+    bot_name: str,
+    api_key: str = "",
+    *,
+    tools: List[ToolDefinition],
+    access_key: str = "",
+    access_key_deprecation_warning_stacklevel: int = 2,
+    session: Optional[httpx.AsyncClient] = None,
+    on_error: ErrorHandler = _default_error_handler,
+    num_tries: int = 2,
+    retry_sleep_time: float = 0.5,
+    base_url: str = "https://api.poe.com/bot/",
+) -> List[ToolCallDefinition]:
+    tool_call_object_dict: Dict[int, Dict[str, Any]] = {}
+    async for message in stream_request_base(
+        request=request,
+        bot_name=bot_name,
+        api_key=api_key,
+        tools=tools,
+        access_key=access_key,
+        access_key_deprecation_warning_stacklevel=access_key_deprecation_warning_stacklevel,
+        session=session,
+        on_error=on_error,
+        num_tries=num_tries,
+        retry_sleep_time=retry_sleep_time,
+        base_url=base_url,
+    ):
+        if message.data is not None:
+            finish_reason = message.data["choices"][0]["finish_reason"]
+            if finish_reason is None:
+                try:
+                    tool_call_object = message.data["choices"][0]["delta"][
+                        "tool_calls"
+                    ][0]
+                    index = tool_call_object.pop("index")
+                    if index not in tool_call_object_dict:
+                        tool_call_object_dict[index] = tool_call_object
+                    else:
+                        function_info = tool_call_object["function"]
+                        tool_call_object_dict[index]["function"][
+                            "arguments"
+                        ] += function_info["arguments"]
+                except KeyError:
+                    continue
+    tool_call_object_list = [
+        tool_call_object
+        for index, tool_call_object in sorted(tool_call_object_dict.items())
+    ]
+    return [
+        ToolCallDefinition(**tool_call_object)
+        for tool_call_object in tool_call_object_list
+    ]
+
+
+async def stream_request_base(
+    request: QueryRequest,
+    bot_name: str,
+    api_key: str = "",
+    *,
+    tools: Optional[List[ToolDefinition]] = None,
+    tool_calls: Optional[List[ToolCallDefinition]] = None,
+    tool_results: Optional[List[ToolResultDefinition]] = None,
+    access_key: str = "",
+    access_key_deprecation_warning_stacklevel: int = 2,
+    session: Optional[httpx.AsyncClient] = None,
+    on_error: ErrorHandler = _default_error_handler,
+    num_tries: int = 2,
+    retry_sleep_time: float = 0.5,
+    base_url: str = "https://api.poe.com/bot/",
+) -> AsyncGenerator[BotMessage, None]:
+    if access_key != "":
+        warnings.warn(
+            "the access_key param is no longer necessary when using this function.",
+            DeprecationWarning,
+            stacklevel=access_key_deprecation_warning_stacklevel,
+        )
 
     async with contextlib.AsyncExitStack() as stack:
         if session is None:
-            session = await stack.enter_async_context(httpx.AsyncClient())
+            session = await stack.enter_async_context(httpx.AsyncClient(timeout=120))
         url = f"{base_url}{bot_name}"
         ctx = _BotContext(
-            endpoint=url, access_key=access_key, session=session, on_error=on_error
+            endpoint=url, api_key=api_key, session=session, on_error=on_error
         )
         got_response = False
         for i in range(num_tries):
             try:
-                async for message in ctx.perform_query_request(request):
+                async for message in ctx.perform_query_request(
+                    request=request,
+                    tools=tools if tools is not None else [],
+                    tool_calls=tool_calls if tool_calls is not None else [],
+                    tool_results=tool_results if tool_results is not None else [],
+                ):
                     got_response = True
                     yield message
                 break
@@ -325,22 +465,92 @@ async def stream_request(
                 raise
             except Exception as e:
                 on_error(e, f"Bot request to {bot_name} failed on try {i}")
-                if got_response or i == num_tries - 1:
+                # Want to retry on some errors even if we have streamed part of the request
+                # RemoteProtocolError: peer closed connection without sending complete message body
+                allow_retry_after_response = isinstance(e, httpx.RemoteProtocolError)
+                if (
+                    got_response and not allow_retry_after_response
+                ) or i == num_tries - 1:
+                    # If it's a BotError, it probably has a good error message
+                    # that we want to show directly.
+                    if isinstance(e, BotError):
+                        raise
+                    # But if it's something else (maybe an HTTP error or something),
+                    # wrap it in a BotError that makes it clear which bot is broken.
                     raise BotError(f"Error communicating with bot {bot_name}") from e
                 await asyncio.sleep(retry_sleep_time)
 
 
+def get_bot_response(
+    messages: List[ProtocolMessage],
+    bot_name: str,
+    api_key: str,
+    *,
+    tools: Optional[List[ToolDefinition]] = None,
+    tool_executables: Optional[List[Callable]] = None,
+    temperature: Optional[float] = None,
+    skip_system_prompt: Optional[bool] = None,
+    logit_bias: Optional[Dict[str, float]] = None,
+    stop_sequences: Optional[List[str]] = None,
+    base_url: str = "https://api.poe.com/bot/",
+    session: Optional[httpx.AsyncClient] = None,
+) -> AsyncGenerator[BotMessage, None]:
+    additional_params = {}
+    # This is so that we don't have to redefine the default values for these params.
+    if temperature is not None:
+        additional_params["temperature"] = temperature
+    if skip_system_prompt is not None:
+        additional_params["skip_system_prompt"] = skip_system_prompt
+    if logit_bias is not None:
+        additional_params["logit_bias"] = logit_bias
+    if stop_sequences is not None:
+        additional_params["stop_sequences"] = stop_sequences
+
+    query = QueryRequest(
+        query=messages,
+        user_id="",
+        conversation_id="",
+        message_id="",
+        version=PROTOCOL_VERSION,
+        type="query",
+        **additional_params,
+    )
+    return stream_request(
+        request=query,
+        bot_name=bot_name,
+        api_key=api_key,
+        tools=tools,
+        tool_executables=tool_executables,
+        base_url=base_url,
+        session=session,
+    )
+
+
 async def get_final_response(
-    request: QueryRequest, bot_name: str, access_key: str = "", *, api_key: str = ""
+    request: QueryRequest,
+    bot_name: str,
+    api_key: str = "",
+    *,
+    access_key: str = "",
+    session: Optional[httpx.AsyncClient] = None,
+    on_error: ErrorHandler = _default_error_handler,
+    num_tries: int = 2,
+    retry_sleep_time: float = 0.5,
+    base_url: str = "https://api.poe.com/bot/",
 ) -> str:
     """Gets the final response from a Poe bot."""
     chunks: List[str] = []
     async for message in stream_request(
         request,
         bot_name,
-        access_key,
-        api_key=api_key,
-        api_key_deprecation_warning_stacklevel=3,
+        api_key,
+        access_key=access_key,
+        access_key_deprecation_warning_stacklevel=3,
+        session=session,
+        on_error=on_error,
+        num_tries=num_tries,
+        retry_sleep_time=retry_sleep_time,
+        base_url=base_url,
     ):
         if isinstance(message, MetaMessage):
             continue
