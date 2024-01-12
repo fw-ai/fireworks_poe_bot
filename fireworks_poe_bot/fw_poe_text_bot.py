@@ -256,11 +256,12 @@ class FireworksPoeTextBot(PoeBot):
                     if user_message is not None:
                         user_message["role"] = "input"
                         # HACKS: move the image to the instruction message
-                        content_non_image = [x for x in user_message["content"] if x["type"] != "image_url"]
-                        content_image = [x for x in user_message["content"] if x["type"] == "image_url"]
-                        if content_image:
-                            new_messages[-1]["content"].append(content_image[0])
-                        user_message["content"] = content_non_image
+                        if isinstance(user_message["content"], list):
+                            content_non_image = [x for x in  user_message['content'] if (not isinstance(x, dict)) or x["type"] != "image_url"]
+                            content_image = [x for x in user_message['content'] if isinstance(x, dict) and x["type"] == "image_url"]
+                            if content_image:
+                                new_messages[-1]["content"].append(content_image[0])
+                            user_message["content"] = content_non_image
                         new_messages.append(user_message)
                 else:
                     if user_message is not None:
