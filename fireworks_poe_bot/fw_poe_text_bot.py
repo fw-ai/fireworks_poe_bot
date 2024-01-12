@@ -38,6 +38,7 @@ class TextModelConfig(ModelConfig):
     additional_args: Optional[Dict[str, int | str | float | List[str]]] = None
     # "alpaca" or None
     chat_format: Optional[str] = None
+    alpaca_instruction_msg: Optional[str] = None
 
 
 @register_bot_plugin("text_models", TextModelConfig)
@@ -56,6 +57,7 @@ class FireworksPoeTextBot(PoeBot):
         system_prompt_override: Optional[str],
         additional_args: Optional[Dict[str, int | str]],
         chat_format: Optional[str],
+        alpaca_instruction_msg: Optional[str],
         completion_async_method: Callable = ChatCompletion.acreate,
     ):
         super().__init__()
@@ -70,6 +72,7 @@ class FireworksPoeTextBot(PoeBot):
         self.prompt_truncate_len = prompt_truncate_len
         self.max_tokens = max_tokens
         self.chat_format = chat_format
+        self.alpaca_instruction_msg = alpaca_instruction_msg
         self.system_prompt_override = system_prompt_override
         self.additional_args = additional_args or {}
 
@@ -240,8 +243,28 @@ class FireworksPoeTextBot(PoeBot):
                 new_messages = []
                 if system_message is not None:
                     new_messages.append(system_message)
-                if user_message is not None:
-                    new_messages.append(user_message)
+                # Insert instruction message, if applicable
+                if self.alpaca_instruction_msg is not None:
+                    new_messages.append(
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": self.alpaca_instruction_msg}
+                            ],
+                        }
+                    )
+                    if user_message is not None:
+                        user_message["role"] = "input"
+                        # HACKS: move the image to the instruction message
+                        content_non_image = [x for x in user_message["content"] if x["type"] != "image_url"]
+                        content_image = [x for x in user_message["content"] if x["type"] == "image_url"]
+                        if content_image:
+                            new_messages[-1]["content"].append(content_image[0])
+                        user_message["content"] = content_non_image
+                        new_messages.append(user_message)
+                else:
+                    if user_message is not None:
+                        new_messages.append(user_message)
                 messages = new_messages
 
             self._log_info(
@@ -250,54 +273,56 @@ class FireworksPoeTextBot(PoeBot):
                     **query.dict(),
                 }
             )
-            # The poe servers send us arbitrary lists of messages. We need to do a few things
-            # to normalize for our chat completion API:
-            # 1. Ensure that all assistant messages are preceded by a user message
-            # 2. Merge adjacent messages from the same role
-            # 3. Ensure that the last message is a user message
 
-            # Ensure that all assistant messages are preceded by a user message
-            for i in range(len(messages) - 1, -1, -1):
-                if messages[i]["role"] == "assistant" and (
-                    i == 0 or messages[i - 1]["role"] != "user"
-                ):
-                    self._log_warn(
-                        {
-                            "msg": f"Assistant message {messages[i]} not preceded by user message"
-                        }
-                    )
-                    messages.insert(i, {"role": "user", "content": ""})
+            if self.chat_format != "alpaca":
+                # The poe servers send us arbitrary lists of messages. We need to do a few things
+                # to normalize for our chat completion API:
+                # 1. Ensure that all assistant messages are preceded by a user message
+                # 2. Merge adjacent messages from the same role
+                # 3. Ensure that the last message is a user message
 
-            # Merge adjacent messages from the same role
-            merged_messages = []
+                # Ensure that all assistant messages are preceded by a user message
+                for i in range(len(messages) - 1, -1, -1):
+                    if messages[i]["role"] == "assistant" and (
+                        i == 0 or messages[i - 1]["role"] != "user"
+                    ):
+                        self._log_warn(
+                            {
+                                "msg": f"Assistant message {messages[i]} not preceded by user message"
+                            }
+                        )
+                        messages.insert(i, {"role": "user", "content": ""})
 
-            # Now there could be images in the messages, in which case the message content is a list
-            def merge_messages_groups(
-                message_group: List[Union[str, List[Dict[str, Any]]]]
-            ) -> Union[str, List[Dict[str, Any]]]:
-                text = []
-                images = []
-                for msg in message_group:
-                    if isinstance(msg, str):
-                        text.append(msg)
-                    elif isinstance(msg, list):
-                        assert msg[0]["type"] == "text"
-                        text.append(msg[0]["text"])
-                        images.extend(msg[1:])
-                if images:
-                    return [{"type": "text", "text": " ".join(text)}, *images]
-                return " ".join(text)
+                # Merge adjacent messages from the same role
+                merged_messages = []
 
-            for role, group in groupby(messages, key=lambda x: x["role"]):
-                content = merge_messages_groups([message["content"] for message in group])
-                merged_messages.append({"role": role, "content": content})
+                # Now there could be images in the messages, in which case the message content is a list
+                def merge_messages_groups(
+                    message_group: List[Union[str, List[Dict[str, Any]]]]
+                ) -> Union[str, List[Dict[str, Any]]]:
+                    text = []
+                    images = []
+                    for msg in message_group:
+                        if isinstance(msg, str):
+                            text.append(msg)
+                        elif isinstance(msg, list):
+                            assert msg[0]["type"] == "text"
+                            text.append(msg[0]["text"])
+                            images.extend(msg[1:])
+                    if images:
+                        return [{"type": "text", "text": " ".join(text)}, *images]
+                    return " ".join(text)
 
-            messages = merged_messages
+                for role, group in groupby(messages, key=lambda x: x["role"]):
+                    content = merge_messages_groups([message["content"] for message in group])
+                    merged_messages.append({"role": role, "content": content})
 
-            # Ensure last message is a user message
-            if messages[-1]["role"] != "user":
-                self._log_warn({"msg": f"Last message {messages[-1]} not a user message"})
-                messages.append({"role": "user", "content": ""})
+                messages = merged_messages
+
+                # Ensure last message is a user message
+                if messages[-1]["role"] != "user":
+                    self._log_warn({"msg": f"Last message {messages[-1]} not a user message"})
+                    messages.append({"role": "user", "content": ""})
 
             additional_args = copy.deepcopy(self.additional_args)
             if "stop" in additional_args:
