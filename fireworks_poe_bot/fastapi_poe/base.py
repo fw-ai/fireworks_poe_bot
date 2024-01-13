@@ -16,7 +16,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sse_starlette.sse import EventSourceResponse, ServerSentEvent
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from fastapi_poe.types import (
+from .types import (
     AttachmentUploadResponse,
     ContentType,
     ErrorResponse,

@@ -14,14 +14,13 @@ import copy
 import httpx
 import time
 import io
-from PIL.Image import Image
+from PIL import Image
 from sse_starlette.sse import ServerSentEvent
-from typing import AsyncIterable, Dict, List, Optional, Union
+from typing import AsyncIterable, Dict, Union
 from fireworks_poe_bot.plugin import log_error, log_info, log_warn, register_bot_plugin
 from fireworks_poe_bot.config import ModelConfig
 import fireworks.client
-from fireworks.client.api import ChatMessage
-from fireworks.client.image import ImageInference, AnswerVideo
+from fireworks.client.image import ImageInference
 
 
 class VideoModelConfig(ModelConfig):
@@ -45,6 +44,20 @@ class FireworksPoeVideoBot(PoeBot):
         self.deployment = deployment
         self.server_version = server_version
         self.poe_bot_access_key = poe_bot_access_key
+
+        model_atoms = model.split("/")
+        if len(model_atoms) != 4:
+            raise ValueError(
+                f"Expected model name to be in the form accounts/{{modelname}}/models/{{model}}, but got {model}"
+            )
+
+        if model_atoms[0] != "accounts" or model_atoms[2] != "models":
+            raise ValueError(
+                f"Expected model name to be in the form accounts/{{modelname}}/models/{{model}}, but got {model}"
+            )
+
+        self.account = model_atoms[1]
+        self.model = model_atoms[3]
 
         self.client = ImageInference(account=self.account, model=self.model)
 
@@ -120,17 +133,17 @@ class FireworksPoeVideoBot(PoeBot):
                     last_user_message = protocol_message.content
 
             if not last_user_message:
-                yield ErrorResponse(allow_retry=False, text="No user message")
+                yield self.text_event(allow_retry=False, text="No user message")
                 return
 
             if len(protocol_message.attachments) != 1:
-                yield ErrorResponse(allow_retry=False, text="Please upload a single image attachment to generate a video")
+                yield self.text_event(allow_retry=False, text="Please upload a single image attachment to generate a video")
                 return
 
             attachment = protocol_message.attachments[0]
             if attachment.content_type not in ["image/png", "image/jpeg"]:
                 # FIXME: more image types?
-                yield ErrorResponse(allow_retry=False, text=f"Invalid image type {attachment.content_type}, expected a PNG or JPEG image")
+                yield self.text_event(allow_retry=False, text=f"Invalid image type {attachment.content_type}, expected a PNG or JPEG image")
                 return
 
             try:
@@ -149,22 +162,27 @@ class FireworksPoeVideoBot(PoeBot):
                 }
             )
 
-            answer: AnswerVideo = await self.client.image_to_video_async(
+            yield self.replace_response_event(text="Generating video...")
+            answer = await self.client.image_to_video_async(
                 input_image=img_pil,
                 safety_check=True,
+                frame_interpolation_factor=2,
                 # TODO: more params
             )
+            # FIXME
+            # answer = answer.video
 
             # Upload file as attachment
             await self.post_message_attachment(
-                self.poe_bot_access_key, query.message_id, file_data=answer.video, filename="video.mp4"
+                self.poe_bot_access_key, query.message_id, file_data=answer, filename="video.mp4"
             )
             end_t_inference = time.time()
 
-            if answer.finish_reason == "CONTENT_FILTERED":
-                response_text = "Your video was generated, but it was filtered by the content filter. Please try again with a different image."
-            else:
-                response_text = "Your video was generated. Please download the attachment."
+            # FIXME
+            # if answer.finish_reason == "CONTENT_FILTERED":
+            #     response_text = "Your video was generated, but it was filtered by the content filter. Please try again with a different image."
+            # else:
+            response_text = "Your video was generated. Please download the attachment."
 
             end_t = time.time()
             elapsed_sec = end_t - start_t
@@ -178,7 +196,7 @@ class FireworksPoeVideoBot(PoeBot):
                     "elapsed_sec_inference": end_t_inference - start_t,
                 }
             )
-            yield PartialResponse(text=response_text)
+            yield self.replace_response_event(text=response_text)
             yield ServerSentEvent(event="done")
             return
         except Exception as e:
