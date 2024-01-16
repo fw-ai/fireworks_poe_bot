@@ -20,7 +20,7 @@ from typing import AsyncIterable, Dict, Union
 from fireworks_poe_bot.plugin import log_error, log_info, log_warn, register_bot_plugin
 from fireworks_poe_bot.config import ModelConfig
 import fireworks.client
-from fireworks.client.image import ImageInference
+from fireworks.client.image import ImageInference, AnswerVideo
 
 
 class VideoModelConfig(ModelConfig):
@@ -163,26 +163,24 @@ class FireworksPoeVideoBot(PoeBot):
             )
 
             yield self.replace_response_event(text="Generating video...")
-            answer = await self.client.image_to_video_async(
+            answer: AnswerVideo = await self.client.image_to_video_async(
                 input_image=img_pil,
                 safety_check=True,
                 frame_interpolation_factor=2,
                 # TODO: more params
             )
-            # FIXME
-            # answer = answer.video
+            video: bytes = answer.video
 
             # Upload file as attachment
             await self.post_message_attachment(
-                self.poe_bot_access_key, query.message_id, file_data=answer, filename="video.mp4"
+                self.poe_bot_access_key, query.message_id, file_data=video, filename="video.mp4"
             )
             end_t_inference = time.time()
 
-            # FIXME
-            # if answer.finish_reason == "CONTENT_FILTERED":
-            #     response_text = "Your video was generated, but it was filtered by the content filter. Please try again with a different image."
-            # else:
-            response_text = "Your video was generated. Please download the attachment."
+            if answer.finish_reason == "CONTENT_FILTERED":
+                response_text = "Your video was generated, but it was filtered by the content filter. Please try again with a different image."
+            else:
+                response_text = "Your video was generated. Please download the attachment."
 
             end_t = time.time()
             elapsed_sec = end_t - start_t
