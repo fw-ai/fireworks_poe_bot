@@ -102,6 +102,19 @@ class FireworksPoeTextBot(PoeBot):
         )
         log_info(payload)
 
+    def _log_error(self, payload: Dict):
+        payload = copy.copy(payload)
+        payload.update(
+            {
+                "severity": "ERROR",
+                "environment": self.environment,
+                "deployment": self.deployment,
+                "model": self.model,
+                "server_version": self.server_version,
+            }
+        )
+        log_error(payload)
+
     async def download_image_and_encode_to_base64(
         self,
         url: str,
@@ -272,6 +285,7 @@ class FireworksPoeTextBot(PoeBot):
                 {
                     "msg": "Request received",
                     **query.dict(),
+                    "processed_msgs": messages,
                 }
             )
 
@@ -362,7 +376,6 @@ class FireworksPoeTextBot(PoeBot):
             elapsed_sec = end_t - start_t
             self._log_info(
                 {
-                    "severity": "INFO",
                     "msg": "Request completed",
                     "query": query.dict(),
                     "response": complete_response,
@@ -374,9 +387,8 @@ class FireworksPoeTextBot(PoeBot):
             return
         except Exception as e:
             end_t = time.time()
-            log_error(
+            self._log_error(
                 {
-                    "severity": "ERROR",
                     "msg": "Invalid request",
                     "error": "\n".join(traceback.format_exception(e)),
                     "elapsed_sec": end_t - start_t,
@@ -401,9 +413,8 @@ class FireworksPoeTextBot(PoeBot):
 
     async def on_error(self, error_request: ReportErrorRequest) -> None:
         """Override this to record errors from the Poe server."""
-        log_error(
+        self._log_error(
             {
-                "severity": "ERROR",
                 "msg": "Error reported",
                 **error_request.dict(),
             }

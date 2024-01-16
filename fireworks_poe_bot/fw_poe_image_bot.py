@@ -103,6 +103,19 @@ class FireworksPoeImageBot(PoeBot):
         )
         log_info(payload)
 
+    def _log_error(self, payload: Dict):
+        payload = copy.copy(payload)
+        payload.update(
+            {
+                "severity": "ERROR",
+                "environment": self.environment,
+                "deployment": self.deployment,
+                "model": self.model,
+                "server_version": self.server_version,
+            }
+        )
+        log_error(payload)
+
     async def get_response(
         self, query: QueryRequest
     ) -> AsyncIterable[Union[PartialResponse, ServerSentEvent]]:
@@ -133,13 +146,6 @@ class FireworksPoeImageBot(PoeBot):
                 else:
                     role = protocol_message.role
                 messages.append({"role": role, "content": protocol_message.content})
-
-            self._log_info(
-                {
-                    "msg": "Request received",
-                    **query.dict(),
-                }
-            )
 
             # The poe servers send us arbitrary lists of messages. We need to do a few things
             # to normalize for our chat completion API:
@@ -172,6 +178,15 @@ class FireworksPoeImageBot(PoeBot):
             if messages[-1]["role"] != "user":
                 self._log_warn({"msg": f"Last message {messages[-1]} not a user message"})
                 messages.append({"role": "user", "content": ""})
+
+            self._log_info(
+                {
+                    "msg": "Request received",
+                    **query.dict(),
+                    "processed_msgs": messages,
+
+                }
+            )
 
             # generated_len = 0
 
@@ -251,9 +266,8 @@ class FireworksPoeImageBot(PoeBot):
             return
         except Exception as e:
             end_t = time.time()
-            log_error(
+            self._log_error(
                 {
-                    "severity": "ERROR",
                     "msg": "Invalid request",
                     "error": "\n".join(traceback.format_exception(e)),
                     "elapsed_sec": end_t - start_t,
@@ -359,9 +373,8 @@ class FireworksPoeImageBot(PoeBot):
 
     async def on_error(self, error_request: ReportErrorRequest) -> None:
         """Override this to record errors from the Poe server."""
-        log_error(
+        self._log_error(
             {
-                "severity": "ERROR",
                 "msg": "Error reported",
                 **error_request.dict(),
             }
