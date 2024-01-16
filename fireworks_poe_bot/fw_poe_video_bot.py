@@ -10,6 +10,7 @@ from .fastapi_poe.types import (
     ErrorResponse,
 )
 
+import asyncio
 import copy
 import httpx
 import time
@@ -162,13 +163,22 @@ class FireworksPoeVideoBot(PoeBot):
                 }
             )
 
-            yield self.replace_response_event(text="Generating video...")
-            answer: AnswerVideo = await self.client.image_to_video_async(
-                input_image=img_pil,
-                safety_check=True,
-                frame_interpolation_factor=2,
-                # TODO: more params
+            inference_task = asyncio.create_task(
+                self.client.image_to_video_async(
+                    input_image=img_pil,
+                    safety_check=True,
+                    frame_interpolation_factor=2,
+                    # TODO: more params
+                )
             )
+
+            elapsed_sec = 0
+            while not inference_task.done():
+                yield self.replace_response_event(text=f"Generating video... ({elapsed_sec} seconds)")
+                await asyncio.sleep(1)
+                elapsed_sec += 1
+
+            answer: AnswerVideo = await inference_task
             video: bytes = answer.video
 
             # Upload file as attachment
