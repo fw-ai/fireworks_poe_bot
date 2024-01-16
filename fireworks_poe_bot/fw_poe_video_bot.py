@@ -134,17 +134,17 @@ class FireworksPoeVideoBot(PoeBot):
                     last_user_message = protocol_message.content
 
             if not last_user_message:
-                yield self.text_event(allow_retry=False, text="No user message")
+                yield self.text_event(text="No user message")
                 return
 
             if len(protocol_message.attachments) != 1:
-                yield self.text_event(allow_retry=False, text="Please upload a single image attachment to generate a video")
+                yield self.text_event(text="Please upload a single image attachment to generate a video")
                 return
 
             attachment = protocol_message.attachments[0]
             if attachment.content_type not in ["image/png", "image/jpeg"]:
                 # FIXME: more image types?
-                yield self.text_event(allow_retry=False, text=f"Invalid image type {attachment.content_type}, expected a PNG or JPEG image")
+                yield self.text_event(text=f"Invalid image type {attachment.content_type}, expected a PNG or JPEG image")
                 return
 
             try:
