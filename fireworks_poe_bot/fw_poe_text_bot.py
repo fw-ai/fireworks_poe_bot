@@ -185,8 +185,6 @@ class FireworksPoeTextBot(PoeBot):
                 if protocol_message.content_type not in {"text/plain", "text/markdown"}:
                     self._log_warn({"msg": "Unknown content type", **log_msg})
                     continue
-                # TODO: support protocol_message.feedback and protocol_message.attachments
-                # if needed
                 img_base64 = None
                 if protocol_message.role == "bot":
                     role = "assistant"
