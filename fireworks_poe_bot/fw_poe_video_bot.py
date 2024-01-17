@@ -17,15 +17,18 @@ import time
 import io
 from PIL import Image
 from sse_starlette.sse import ServerSentEvent
-from typing import AsyncIterable, Dict, Union
+from typing import AsyncIterable, Dict, Optional, Union
 from fireworks_poe_bot.plugin import log_error, log_info, log_warn, register_bot_plugin
 from fireworks_poe_bot.config import ModelConfig
 import fireworks.client
-from fireworks.client.image import ImageInference, AnswerVideo
+from fireworks.client.image import ImageInference, Answer, AnswerVideo
 
 
 class VideoModelConfig(ModelConfig):
     poe_bot_access_key: str
+
+    text2image_model_name: str = "stable-diffusion-xl-1024-v1-0"
+    text2image_num_steps: int = 50
 
 
 @register_bot_plugin("video_models", VideoModelConfig)
@@ -37,6 +40,8 @@ class FireworksPoeVideoBot(PoeBot):
             deployment: str,
             server_version: str,
             poe_bot_access_key: str,
+            text2image_model_name: str,
+            text2image_num_steps: int
     ):
         super().__init__()
         self.model = model
@@ -45,6 +50,8 @@ class FireworksPoeVideoBot(PoeBot):
         self.deployment = deployment
         self.server_version = server_version
         self.poe_bot_access_key = poe_bot_access_key
+        self.text2image_model_name = text2image_model_name
+        self.text2image_num_steps = text2image_num_steps
 
         model_atoms = model.split("/")
         if len(model_atoms) != 4:
@@ -61,6 +68,7 @@ class FireworksPoeVideoBot(PoeBot):
         self.model = model_atoms[3]
 
         self.client = ImageInference(account=self.account, model=self.model)
+        self.text2img_client = ImageInference(account=self.account, model=self.text2image_model_name)
 
 
     def _log_warn(self, payload: Dict):
@@ -137,24 +145,52 @@ class FireworksPoeVideoBot(PoeBot):
                 yield self.text_event(text="No user message")
                 return
 
-            if len(protocol_message.attachments) != 1:
+            img_pil: Optional[Image] = None
+            if len(protocol_message.attachments) == 0:
+                img_gen_task = asyncio.create_task(
+                    self.text2img_client.text_to_image_async(
+                        prompt=protocol_message.content,
+                        cfg_scale=7,
+                        height=768,
+                        width=1344,
+                        sampler=None,
+                        steps=self.text2image_num_steps,
+                        seed=0,
+                        safety_check=True,
+                        output_image_format="JPG",
+                    )
+                )
+
+                elapsed_sec = 0
+                while not img_gen_task.done():
+                    yield self.replace_response_event(text=f"Generating image... ({elapsed_sec} seconds)")
+                    await asyncio.sleep(1)
+                    elapsed_sec += 1
+
+                img_answer: Answer = await img_gen_task
+                if img_answer.finish_reason == "CONTENT_FILTERED":
+                    yield self.text_event(text="Your message was filtered by the content filter. Please try again with a different message.")
+                    return
+                img_pil = img_answer.image
+            elif len(protocol_message.attachments) == 1:
+                attachment = protocol_message.attachments[0]
+                if attachment.content_type not in ["image/png", "image/jpeg"]:
+                    # FIXME: more image types?
+                    yield self.text_event(text=f"Invalid image type {attachment.content_type}, expected a PNG or JPEG image")
+                    return
+
+                try:
+                    img_pil = await self.download_image_and_encode_to_pil(
+                        protocol_message.attachments[0].url
+                    )
+                except Exception as e:
+                    yield ErrorResponse(allow_retry=False, text=str(e))
+                    raise RuntimeError(str(e))
+            else:
                 yield self.text_event(text="Please upload a single image attachment to generate a video")
                 return
 
-            attachment = protocol_message.attachments[0]
-            if attachment.content_type not in ["image/png", "image/jpeg"]:
-                # FIXME: more image types?
-                yield self.text_event(text=f"Invalid image type {attachment.content_type}, expected a PNG or JPEG image")
-                return
-
-            try:
-                img_pil: Image = await self.download_image_and_encode_to_pil(
-                    protocol_message.attachments[0].url
-                )
-            except Exception as e:
-                yield ErrorResponse(allow_retry=False, text=str(e))
-                raise RuntimeError(str(e))
-
+            assert img_pil is not None
 
             self._log_info(
                 {
