@@ -279,16 +279,6 @@ class FireworksPoeTextBot(PoeBot):
                         new_messages.append(user_message)
                 messages = new_messages
 
-            log_query = copy.copy(query.dict())
-            log_query.pop("http_request")
-            self._log_info(
-                {
-                    "msg": "Request received",
-                    **log_query,
-                    "processed_msgs": messages,
-                }
-            )
-
             if self.chat_format != "alpaca":
                 # The poe servers send us arbitrary lists of messages. We need to do a few things
                 # to normalize for our chat completion API:
@@ -338,6 +328,16 @@ class FireworksPoeTextBot(PoeBot):
                 if messages[-1]["role"] != "user":
                     self._log_warn({"msg": f"Last message {messages[-1]} not a user message"})
                     messages.append({"role": "user", "content": ""})
+
+            log_query = copy.copy(query.dict())
+            log_query.pop("http_request")
+            self._log_info(
+                {
+                    "msg": "Request received",
+                    **log_query,
+                    "processed_msgs": messages,
+                }
+            )
 
             additional_args = copy.deepcopy(self.additional_args)
             if "stop" in additional_args:

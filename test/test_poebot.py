@@ -1,14 +1,15 @@
 from typing import List
-from fireworks_poe_bot import (
+from fireworks_poe_bot.fw_poe_text_bot import (
     FireworksPoeTextBot,
 )
 from sse_starlette.sse import ServerSentEvent
-from .fastapi_poe.types import (
+from fastapi_poe.types import (
     QueryRequest,
     ProtocolMessage,
     PartialResponse,
     ErrorResponse,
 )
+from fastapi import Request
 
 import unittest
 
@@ -60,14 +61,29 @@ class TestFWPoeBot(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.model = ""
         self.environment = ""
+        self.deployment = ""
         self.server_version = ""
         self.completion_async_method = fake_chat_completion_acreate
         self.bot = FireworksPoeTextBot(
-            self.model,
-            self.environment,
-            self.server_version,
-            self.completion_async_method,
+            model=self.model,
+            api_key="",
+            environment=self.environment,
+            deployment=self.deployment,
+            server_version=self.server_version,
+            allow_attachments=False,
+            input_image_size=-1,
+            prompt_truncate_len=1024,
+            max_tokens=2048,
+            system_prompt_override=None,
+            additional_args=None,
+            chat_format=None,
+            alpaca_instruction_msg=None,
+            completion_async_method=self.completion_async_method,
         )
+
+    class FakeRequest(Request):
+        def __init__(self):
+            pass
 
     async def _test_with_query(self, query: List[ProtocolMessage]):
         query_request = QueryRequest(
@@ -77,6 +93,7 @@ class TestFWPoeBot(unittest.IsolatedAsyncioTestCase):
             user_id="",
             conversation_id="",
             message_id="",
+            http_request=self.FakeRequest(),
         )
         resp_fragments = []
         async for resp in self.bot.get_response(query_request):
@@ -165,6 +182,17 @@ class TestFWPoeBot(unittest.IsolatedAsyncioTestCase):
                 ProtocolMessage(role="bot", content="foo"),
             ]
         )
+        self.assertEqual(resp, "foo")
+
+    async def test_multiple_system_msgs(self):
+        resp = await self._test_with_query(
+            [
+                ProtocolMessage(role="system", content="hello"),
+                ProtocolMessage(role="system", content="foo"),
+                ProtocolMessage(role="user", content="bar"),
+            ]
+        )
+        import pdb; pdb.set_trace()
         self.assertEqual(resp, "foo")
 
 
