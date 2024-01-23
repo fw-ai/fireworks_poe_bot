@@ -392,7 +392,7 @@ class FireworksPoeTextBot(PoeBot):
                     "msg": "Invalid request",
                     "error": "\n".join(traceback.format_exception(e)),
                     "elapsed_sec": end_t - start_t,
-                    "query": query.dict(),
+                    "query": query_dict,
                 }
             )
             if "prompt is too long" in str(e):

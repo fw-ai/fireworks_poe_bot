@@ -1,5 +1,4 @@
 # Imports needed to intialize plugins
-from http.client import HTTPException
 from fireworks_poe_bot.fw_poe_text_bot import FireworksPoeTextBot
 from fireworks_poe_bot.fw_poe_image_bot import FireworksPoeImageBot
 from fireworks_poe_bot.fw_poe_qr_bot import FireworksPoeQRBot
@@ -13,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any, Dict
 import fastapi
 import fastapi_poe
+from fastapi import HTTPException
 from fastapi_poe import make_app
 import uvicorn
 import logging
