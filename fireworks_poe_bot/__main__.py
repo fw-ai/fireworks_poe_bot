@@ -11,6 +11,7 @@ from fireworks_poe_bot.plugin import LoggingPlugin, register_logging_plugin, BOT
 import argparse
 from dataclasses import dataclass
 from typing import Any, Dict
+import fastapi
 import fastapi_poe
 from fastapi_poe import make_app
 import uvicorn
@@ -127,16 +128,12 @@ def main(args=None):
                 raise HTTPException(status_code=404, detail=f"Bot {bot_fqn} not found")
             return bots[bot_fqn]
 
-        def parse_query_params(self, params: str):
-            return {k: v for k, v in [param.split("=") for param in params.split("&")]}
-
-        def find_bot_from_query_params(self, params: str) -> fastapi_poe.PoeBot:
-            query_params = self.parse_query_params(params)
-            if "account" not in query_params:
+        def find_bot_from_query_params(self, params: fastapi.QueryParams) -> fastapi_poe.PoeBot:
+            if "account" not in params:
                 raise HTTPException(status_code=400, detail=f"Missing account query parameter")
-            if "model" not in query_params:
+            if "model" not in params:
                 raise HTTPException(status_code=400, detail=f"Missing model query parameter")
-            return self.find_bot(query_params["account"], query_params["model"])
+            return self.find_bot(params["account"], params["model"])
 
         async def get_response(self, request: fastapi_poe.QueryRequest):
             bot = self.find_bot_from_query_params(request.http_request.query_params)
