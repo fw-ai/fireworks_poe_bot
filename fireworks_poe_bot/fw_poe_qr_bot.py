@@ -2,9 +2,9 @@ import base64
 import copy
 import io
 from typing import AsyncIterable, Dict, List, Optional, Union
-from .fastapi_poe import PoeBot
+from fastapi_poe import PoeBot
 from sse_starlette.sse import ServerSentEvent
-from .fastapi_poe.types import (
+from fastapi_poe.types import (
     PartialResponse,
     QueryRequest,
     ReportErrorRequest,
@@ -246,10 +246,12 @@ class FireworksPoeQRBot(PoeBot):
             assert messages[-1]["role"] == "user"
             prompt = messages[-1]["content"]
 
+            log_query = copy.copy(query.dict())
+            log_query.pop("http_request")
             self._log_info(
                 {
                     "msg": "Request received",
-                    **query.dict(),
+                    **log_query,
                     "processed_msgs": messages,
                 }
             )
@@ -303,7 +305,7 @@ class FireworksPoeQRBot(PoeBot):
                 {
                     "severity": "INFO",
                     "msg": "Request completed",
-                    **query.dict(),
+                    **log_query,
                     "prompt": prompt,
                     "qr_data": qr_data,
                     "qr_strength": qr_strength,
@@ -324,7 +326,7 @@ class FireworksPoeQRBot(PoeBot):
                     "msg": "Invalid request",
                     "error": "\n".join(traceback.format_exception(e)),
                     "elapsed_sec": end_t - start_t,
-                    **query.dict(),
+                    **log_query,
                 }
             )
             if "prompt is too long" in str(e):

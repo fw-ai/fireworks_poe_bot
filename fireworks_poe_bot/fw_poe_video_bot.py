@@ -1,6 +1,6 @@
 import traceback
-from .fastapi_poe import PoeBot
-from .fastapi_poe.types import (
+from fastapi_poe import PoeBot
+from fastapi_poe.types import (
     PartialResponse,
     QueryRequest,
     ReportErrorRequest,
@@ -169,14 +169,14 @@ class FireworksPoeVideoBot(PoeBot):
 
                 img_answer: Answer = await img_gen_task
                 if img_answer.finish_reason == "CONTENT_FILTERED":
-                    yield self.text_event(text="Your message was filtered by the content filter. Please try again with a different message.")
+                    yield self.replace_response_event(text="Your message was filtered by the content filter. Please try again with a different message.")
                     return
                 img_pil = img_answer.image
             elif len(protocol_message.attachments) == 1:
                 attachment = protocol_message.attachments[0]
                 if attachment.content_type not in ["image/png", "image/jpeg"]:
                     # FIXME: more image types?
-                    yield self.text_event(text=f"Invalid image type {attachment.content_type}, expected a PNG or JPEG image")
+                    yield self.replace_response_event(text=f"Invalid image type {attachment.content_type}, expected a PNG or JPEG image")
                     return
 
                 try:
@@ -187,15 +187,17 @@ class FireworksPoeVideoBot(PoeBot):
                     yield ErrorResponse(allow_retry=False, text=str(e))
                     raise RuntimeError(str(e))
             else:
-                yield self.text_event(text="Please upload a single image attachment to generate a video")
+                yield self.replace_response_event(text="Please upload a single image attachment to generate a video")
                 return
 
             assert img_pil is not None
 
+            log_query = copy.copy(query.dict())
+            log_query.pop("http_request")
             self._log_info(
                 {
                     "msg": "Request received",
-                    **query.dict(),
+                    **log_query,
                 }
             )
 
@@ -234,7 +236,7 @@ class FireworksPoeVideoBot(PoeBot):
                 {
                     "severity": "INFO",
                     "msg": "Request completed",
-                    **query.dict(),
+                    **log_query,
                     "response": response_text,
                     "elapsed_sec": elapsed_sec,
                     "elapsed_sec_inference": end_t_inference - start_t,
@@ -251,7 +253,7 @@ class FireworksPoeVideoBot(PoeBot):
                     "msg": "Invalid request",
                     "error": "\n".join(traceback.format_exception(e)),
                     "elapsed_sec": end_t - start_t,
-                    **query.dict(),
+                    **log_query,
                 }
             )
             if "prompt is too long" in str(e):

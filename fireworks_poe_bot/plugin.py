@@ -57,4 +57,6 @@ def register_bot_plugin(config_key: str, BotConfigClass: type = ModelConfig):
             config_key=config_key,
         ))
 
+        return BotPluginClass
+
     return decorator

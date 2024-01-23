@@ -10,7 +10,10 @@ from fireworks_poe_bot.plugin import LoggingPlugin, register_logging_plugin, BOT
 import argparse
 from dataclasses import dataclass
 from typing import Any, Dict
-from .fastapi_poe import make_app
+import fastapi
+import fastapi_poe
+from fastapi import HTTPException
+from fastapi_poe import make_app
 import uvicorn
 import logging
 import os
@@ -35,7 +38,6 @@ class PyLoggingPlugin(LoggingPlugin):
 
     def log_error(self, payload: Dict[str, Any]):
         logging.error(payload)
-
 
 def main(args=None):
     if args is None:
@@ -113,7 +115,45 @@ def main(args=None):
         len(bots) > 0
     ), "No bots specified, use --text-models or --image-models to specify models to serve"
 
-    app = make_app(bots, allow_without_key=True)
+
+    # Bot that proxies into the bots contained in the `bots` dictionary above
+    class FWProxyBot(fastapi_poe.PoeBot):
+        def __init__(self, bots):
+            super().__init__()
+            self.bots = bots
+
+        def find_bot(self, account: str, model: str) -> fastapi_poe.PoeBot:
+            bot_fqn = f"accounts/{account}/models/{model}"
+            if bot_fqn not in self.bots:
+                raise HTTPException(status_code=404, detail=f"Bot {bot_fqn} not found")
+            return bots[bot_fqn]
+
+        def find_bot_from_query_params(self, params) -> fastapi_poe.PoeBot:
+            if "account" not in params:
+                raise HTTPException(status_code=400, detail=f"Missing account query parameter")
+            if "model" not in params:
+                raise HTTPException(status_code=400, detail=f"Missing model query parameter")
+            return self.find_bot(params["account"], params["model"])
+
+        async def get_response(self, request: fastapi_poe.QueryRequest):
+            bot = self.find_bot_from_query_params(request.http_request.query_params)
+            async for resp in bot.get_response(request):
+                yield resp
+
+        async def get_settings(self, setting: fastapi_poe.SettingsRequest) -> fastapi_poe.SettingsResponse:
+            bot = self.find_bot_from_query_params(setting.http_request.query_params)
+            return await bot.get_settings(setting)
+
+        async def on_feedback(self, feedback_request: fastapi_poe.ReportFeedbackRequest) -> None:
+            bot = self.find_bot_from_query_params(feedback_request.http_request.query_params)
+            await bot.on_feedback(feedback_request)
+
+        async def on_error(self, error_request: fastapi_poe.ReportErrorRequest) -> None:
+            bot = self.find_bot_from_query_params(error_request.http_request.query_params)
+            await bot.on_error(error_request)
+
+
+    app = make_app(FWProxyBot(bots), allow_without_key=True)
 
     uvicorn.run(
         app,
