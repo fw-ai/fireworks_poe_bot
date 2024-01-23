@@ -279,10 +279,12 @@ class FireworksPoeTextBot(PoeBot):
                         new_messages.append(user_message)
                 messages = new_messages
 
+            log_query = copy.copy(query.dict())
+            log_query.pop("http_request")
             self._log_info(
                 {
                     "msg": "Request received",
-                    **query.dict(),
+                    **log_query,
                     "processed_msgs": messages,
                 }
             )
@@ -375,7 +377,7 @@ class FireworksPoeTextBot(PoeBot):
             self._log_info(
                 {
                     "msg": "Request completed",
-                    "query": query.dict(),
+                    "query": log_query,
                     "response": complete_response,
                     "generated_len": generated_len,
                     "elapsed_sec": elapsed_sec,

@@ -179,10 +179,12 @@ class FireworksPoeImageBot(PoeBot):
                 self._log_warn({"msg": f"Last message {messages[-1]} not a user message"})
                 messages.append({"role": "user", "content": ""})
 
+            log_query = copy.copy(query.dict())
+            log_query.pop("http_request")
             self._log_info(
                 {
                     "msg": "Request received",
-                    **query.dict(),
+                    **log_query,
                     "processed_msgs": messages,
 
                 }
@@ -254,7 +256,7 @@ class FireworksPoeImageBot(PoeBot):
                 {
                     "severity": "INFO",
                     "msg": "Request completed",
-                    **query.dict(),
+                    **log_query,
                     "response": response_text,
                     "elapsed_sec": elapsed_sec,
                     "elapsed_sec_inference": end_t_inference - start_t,

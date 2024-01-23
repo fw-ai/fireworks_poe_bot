@@ -246,10 +246,12 @@ class FireworksPoeQRBot(PoeBot):
             assert messages[-1]["role"] == "user"
             prompt = messages[-1]["content"]
 
+            log_query = copy.copy(query.dict())
+            log_query.pop("http_request")
             self._log_info(
                 {
                     "msg": "Request received",
-                    **query.dict(),
+                    **log_query,
                     "processed_msgs": messages,
                 }
             )
@@ -303,7 +305,7 @@ class FireworksPoeQRBot(PoeBot):
                 {
                     "severity": "INFO",
                     "msg": "Request completed",
-                    **query.dict(),
+                    **log_query,
                     "prompt": prompt,
                     "qr_data": qr_data,
                     "qr_strength": qr_strength,

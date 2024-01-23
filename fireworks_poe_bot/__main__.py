@@ -128,7 +128,7 @@ def main(args=None):
                 raise HTTPException(status_code=404, detail=f"Bot {bot_fqn} not found")
             return bots[bot_fqn]
 
-        def find_bot_from_query_params(self, params: fastapi.QueryParams) -> fastapi_poe.PoeBot:
+        def find_bot_from_query_params(self, params) -> fastapi_poe.PoeBot:
             if "account" not in params:
                 raise HTTPException(status_code=400, detail=f"Missing account query parameter")
             if "model" not in params:
@@ -137,7 +137,8 @@ def main(args=None):
 
         async def get_response(self, request: fastapi_poe.QueryRequest):
             bot = self.find_bot_from_query_params(request.http_request.query_params)
-            return await bot.get_response(request)
+            async for resp in bot.get_response(request):
+                yield resp
 
         async def get_settings(self, setting: fastapi_poe.SettingsRequest) -> fastapi_poe.SettingsResponse:
             bot = self.find_bot_from_query_params(setting.http_request.query_params)
