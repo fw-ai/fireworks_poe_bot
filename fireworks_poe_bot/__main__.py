@@ -138,7 +138,7 @@ def main(args=None):
                 raise HTTPException(status_code=400, detail=f"Missing model query parameter")
             return self.find_bot(query_params["account"], query_params["model"])
 
-        async def get_response(self, request: fastapi_poe.PoeRequest):
+        async def get_response(self, request: fastapi_poe.QueryRequest):
             bot = self.find_bot_from_query_params(request.http_request.query_params)
             return await bot.get_response(request)
 
