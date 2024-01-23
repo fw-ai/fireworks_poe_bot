@@ -2,9 +2,9 @@ import base64
 import copy
 import io
 from typing import AsyncIterable, Dict, List, Optional, Union
-from .fastapi_poe import PoeBot
+from fastapi_poe import PoeBot
 from sse_starlette.sse import ServerSentEvent
-from .fastapi_poe.types import (
+from fastapi_poe.types import (
     PartialResponse,
     QueryRequest,
     ReportErrorRequest,

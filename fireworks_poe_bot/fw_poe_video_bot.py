@@ -1,6 +1,6 @@
 import traceback
-from .fastapi_poe import PoeBot
-from .fastapi_poe.types import (
+from fastapi_poe import PoeBot
+from fastapi_poe.types import (
     PartialResponse,
     QueryRequest,
     ReportErrorRequest,

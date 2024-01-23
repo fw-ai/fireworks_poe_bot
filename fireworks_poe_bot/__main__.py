@@ -10,7 +10,7 @@ from fireworks_poe_bot.plugin import LoggingPlugin, register_logging_plugin, BOT
 import argparse
 from dataclasses import dataclass
 from typing import Any, Dict
-from .fastapi_poe import make_app
+from fastapi_poe import make_app
 import uvicorn
 import logging
 import os

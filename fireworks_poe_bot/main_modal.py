@@ -4,7 +4,7 @@ import fireworks.client
 
 import argparse
 from dataclasses import dataclass
-from .fastapi_poe import make_app
+from fastapi_poe import make_app
 import os
 from modal import Image, Stub, asgi_app
 
