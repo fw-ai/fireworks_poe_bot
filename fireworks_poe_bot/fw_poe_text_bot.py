@@ -43,6 +43,9 @@ class TextModelConfig(ModelConfig):
 
     meta_response: Optional[MetaResponse] = None
 
+    # Feature flag to disable message merging. TODO: delete the code
+    merge_messages: bool = True
+
 
 @register_bot_plugin("text_models", TextModelConfig)
 class FireworksPoeTextBot(PoeBot):
@@ -62,6 +65,7 @@ class FireworksPoeTextBot(PoeBot):
         chat_format: Optional[str],
         alpaca_instruction_msg: Optional[str],
         meta_response: Optional[MetaResponse],
+        merge_messages: bool,
         completion_async_method: Callable = ChatCompletion.acreate,
     ):
         super().__init__()
@@ -83,6 +87,7 @@ class FireworksPoeTextBot(PoeBot):
             self.meta_response = MetaResponse(**meta_response)
         else:
             self.meta_response = meta_response
+        self.merge_messages = merge_messages
 
     def _log_warn(self, payload: Dict):
         payload = copy.copy(payload)
@@ -290,7 +295,7 @@ class FireworksPoeTextBot(PoeBot):
                         new_messages.append(user_message)
                 messages = new_messages
 
-            if self.chat_format != "alpaca":
+            if self.chat_format != "alpaca" and self.merge_messages:
                 # The poe servers send us arbitrary lists of messages. We need to do a few things
                 # to normalize for our chat completion API:
                 # 1. Ensure that all assistant messages are preceded by a user message
