@@ -10,6 +10,7 @@ from fastapi_poe.types import (
     SettingsRequest,
     SettingsResponse,
     ErrorResponse,
+    MetaResponse,
 )
 
 import fireworks.client
@@ -40,6 +41,8 @@ class TextModelConfig(ModelConfig):
     chat_format: Optional[str] = None
     alpaca_instruction_msg: Optional[str] = None
 
+    meta_response: Optional[MetaResponse] = None
+
 
 @register_bot_plugin("text_models", TextModelConfig)
 class FireworksPoeTextBot(PoeBot):
@@ -58,6 +61,7 @@ class FireworksPoeTextBot(PoeBot):
         additional_args: Optional[Dict[str, int | str]],
         chat_format: Optional[str],
         alpaca_instruction_msg: Optional[str],
+        meta_response: Optional[MetaResponse],
         completion_async_method: Callable = ChatCompletion.acreate,
     ):
         super().__init__()
@@ -75,6 +79,10 @@ class FireworksPoeTextBot(PoeBot):
         self.alpaca_instruction_msg = alpaca_instruction_msg
         self.system_prompt_override = system_prompt_override
         self.additional_args = additional_args or {}
+        if meta_response:
+            self.meta_response = MetaResponse(**meta_response)
+        else:
+            self.meta_response = meta_response
 
     def _log_warn(self, payload: Dict):
         payload = copy.copy(payload)
@@ -163,6 +171,9 @@ class FireworksPoeTextBot(PoeBot):
     async def get_response(
         self, query: QueryRequest
     ) -> AsyncIterable[Union[PartialResponse, ServerSentEvent]]:
+        if self.meta_response is not None:
+            yield self.meta_response
+
         if len(query.query) == 0:
             yield ErrorResponse(allow_retry=False, text="Empty query")
             return
@@ -392,7 +403,7 @@ class FireworksPoeTextBot(PoeBot):
                     "msg": "Invalid request",
                     "error": "\n".join(traceback.format_exception(e)),
                     "elapsed_sec": end_t - start_t,
-                    "query": query_dict,
+                    "query": log_query,
                 }
             )
             if "prompt is too long" in str(e):

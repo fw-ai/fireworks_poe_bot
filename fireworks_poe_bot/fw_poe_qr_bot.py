@@ -12,6 +12,7 @@ from fastapi_poe.types import (
     SettingsRequest,
     SettingsResponse,
     ErrorResponse,
+    MetaResponse,
 )
 
 import fireworks.client
@@ -99,6 +100,8 @@ class QRCodeConfig(ModelConfig):
     conditioning_scale: Optional[float] = None
     default_cfg_scale: Optional[float] = None
 
+    meta_response: Optional[MetaResponse] = None
+
 @register_bot_plugin("qr_models", QRCodeConfig)
 class FireworksPoeQRBot(PoeBot):
     def __init__(
@@ -111,6 +114,7 @@ class FireworksPoeQRBot(PoeBot):
         gcs_bucket_name: str,
         conditioning_scale: float,
         default_cfg_scale: float,
+        meta_response: Optional[MetaResponse],
     ):
         super().__init__()
         self.model = model
@@ -138,6 +142,10 @@ class FireworksPoeQRBot(PoeBot):
 
         self.gcs_bucket_name = gcs_bucket_name
         self.conditioning_scale = conditioning_scale
+        if meta_response:
+            self.meta_response = MetaResponse(**meta_response)
+        else:
+            self.meta_response = meta_response
 
     def _log_warn(self, payload: Dict):
         payload = copy.copy(payload)
@@ -181,6 +189,9 @@ class FireworksPoeQRBot(PoeBot):
     async def get_response(
         self, query: QueryRequest
     ) -> AsyncIterable[Union[PartialResponse, ServerSentEvent]]:
+        if self.meta_response is not None:
+            yield self.meta_response
+
         orig_api_key = self.client.api_key
         fireworks.client.api_key = self.api_key
         try:
