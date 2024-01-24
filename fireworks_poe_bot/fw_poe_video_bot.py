@@ -8,6 +8,7 @@ from fastapi_poe.types import (
     SettingsRequest,
     SettingsResponse,
     ErrorResponse,
+    MetaResponse,
 )
 
 import asyncio
@@ -30,6 +31,8 @@ class VideoModelConfig(ModelConfig):
     text2image_model_name: str = "stable-diffusion-xl-1024-v1-0"
     text2image_num_steps: int = 50
 
+    meta_response: Optional[MetaResponse] = None
+
 
 @register_bot_plugin("video_models", VideoModelConfig)
 class FireworksPoeVideoBot(PoeBot):
@@ -41,7 +44,8 @@ class FireworksPoeVideoBot(PoeBot):
             server_version: str,
             poe_bot_access_key: str,
             text2image_model_name: str,
-            text2image_num_steps: int
+            text2image_num_steps: int,
+            meta_response: Optional[MetaResponse],
     ):
         super().__init__()
         self.model = model
@@ -69,6 +73,10 @@ class FireworksPoeVideoBot(PoeBot):
 
         self.client = ImageInference(account=self.account, model=self.model)
         self.text2img_client = ImageInference(account=self.account, model=self.text2image_model_name)
+        if meta_response:
+            self.meta_response = MetaResponse(**meta_response)
+        else:
+            self.meta_response = meta_response
 
 
     def _log_warn(self, payload: Dict):
@@ -112,6 +120,9 @@ class FireworksPoeVideoBot(PoeBot):
     async def get_response(
         self, query: QueryRequest
     ) -> AsyncIterable[Union[PartialResponse, ServerSentEvent]]:
+        if self.meta_response is not None:
+            yield self.meta_response
+
         if len(query.query) == 0:
             yield ErrorResponse(allow_retry=False, text="Empty query")
             return

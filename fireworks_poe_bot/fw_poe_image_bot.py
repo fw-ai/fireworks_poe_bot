@@ -12,6 +12,7 @@ from fastapi_poe.types import (
     SettingsRequest,
     SettingsResponse,
     ErrorResponse,
+    MetaResponse,
 )
 
 import fireworks.client
@@ -36,6 +37,8 @@ class ImageModelConfig(ModelConfig):
     num_steps: int = 25
     multi_turn: bool = True
 
+    meta_response: Optional[MetaResponse] = None
+
 @register_bot_plugin("image_models", ImageModelConfig)
 class FireworksPoeImageBot(PoeBot):
     def __init__(
@@ -47,7 +50,8 @@ class FireworksPoeImageBot(PoeBot):
         server_version: str,
         gcs_bucket_name: str,
         num_steps: int,
-        multi_turn: bool
+        multi_turn: bool,
+        meta_response: Optional[MetaResponse],
     ):
         super().__init__()
         self.model = model
@@ -76,6 +80,10 @@ class FireworksPoeImageBot(PoeBot):
 
         self.gcs_bucket_name = gcs_bucket_name
         self.multi_turn = multi_turn
+        if meta_response:
+            self.meta_response = MetaResponse(**meta_response)
+        else:
+            self.meta_response = meta_response
 
     def _log_warn(self, payload: Dict):
         payload = copy.copy(payload)
@@ -119,6 +127,9 @@ class FireworksPoeImageBot(PoeBot):
     async def get_response(
         self, query: QueryRequest
     ) -> AsyncIterable[Union[PartialResponse, ServerSentEvent]]:
+        if self.meta_response is not None:
+            yield self.meta_response
+
         orig_api_key = self.client.api_key
         fireworks.client.api_key = self.api_key
         try:
