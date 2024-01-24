@@ -74,10 +74,11 @@ class TestFWPoeBot(unittest.IsolatedAsyncioTestCase):
             input_image_size=-1,
             prompt_truncate_len=1024,
             max_tokens=2048,
-            system_prompt_override=None,
+            system_prompt_override="",
             additional_args=None,
             chat_format=None,
             alpaca_instruction_msg=None,
+            meta_response=None,
             completion_async_method=self.completion_async_method,
         )
 
@@ -192,7 +193,6 @@ class TestFWPoeBot(unittest.IsolatedAsyncioTestCase):
                 ProtocolMessage(role="user", content="bar"),
             ]
         )
-        import pdb; pdb.set_trace()
         self.assertEqual(resp, "foo")
 
 
