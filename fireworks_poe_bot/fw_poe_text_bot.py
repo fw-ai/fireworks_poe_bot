@@ -236,20 +236,12 @@ class FireworksPoeTextBot(PoeBot):
                     messages.append({"role": role, "content": protocol_message.content})
 
             if self.system_prompt_override is not None:
-                system_prompt_msg = None
-                for msg in messages:
-                    if msg["role"] == "system":
-                        system_prompt_msg = msg
-                        break
-                if system_prompt_msg is None:
+                if len(messages) == 0 or messages[0]["role"] != "system":
                     system_prompt_msg = {
                         "role": "system",
+                        "content": {"type": "text", "text": self.system_prompt_override}
                     }
                     messages.insert(0, system_prompt_msg)
-
-                system_prompt_msg["content"] = [
-                    {"type": "text", "text": self.system_prompt_override},
-                ]
 
             if self.chat_format == "alpaca":
                 # Discard all messages except "system" and the last "user"
