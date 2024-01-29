@@ -180,6 +180,7 @@ class FireworksPoeTextBot(PoeBot):
 
         orig_api_key = fireworks.client.api_key
         fireworks.client.api_key = self.api_key
+        num_images = 0
         try:
             start_t = time.time()
             messages: List[ChatMessage] = []
@@ -213,6 +214,7 @@ class FireworksPoeTextBot(PoeBot):
                             raise RuntimeError(str(e))
 
                 if img_base64:
+                    num_images += 1
                     if cumulative_image_size_mb > 8:
                         # Apigee has a limit of 10MB for payload, we set image total limit to 8MB
                         yield ErrorResponse(
@@ -234,6 +236,18 @@ class FireworksPoeTextBot(PoeBot):
                     cumulative_image_size_mb += len(img_base64) / 1024 / 1024
                 else:
                     messages.append({"role": role, "content": protocol_message.content})
+                    
+            if num_images > 1:
+                # We want to remove all the images except the last one
+                # since the current VLM model does not support multi-image
+                last_image_kept = False
+                for message in messages[::-1]:
+                    if isinstance(message['content'], list):
+                        # content being a list means it contains an image
+                        if last_image_kept:
+                            message['content'] = message['content'][0]['text']
+                        else:
+                            last_image_kept = True
 
             if self.system_prompt_override is not None:
                 if len(messages) == 0 or messages[0]["role"] != "system":
