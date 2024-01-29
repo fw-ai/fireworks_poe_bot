@@ -9,7 +9,7 @@ RUN apt-get install ffmpeg libsm6 libxext6  -y
 RUN pip3 install --upgrade pip
 
 # Install the required Python packages
-RUN pip3 install fastapi-poe>=0.0.29 \
+RUN pip3 install fastapi-poe==0.0.29 \
     'fireworks-ai>=0.11.2' \
     boto3 \
     Pillow
