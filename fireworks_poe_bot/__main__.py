@@ -4,12 +4,7 @@ from fireworks_poe_bot.fw_poe_image_bot import FireworksPoeImageBot
 from fireworks_poe_bot.fw_poe_qr_bot import FireworksPoeQRBot
 from fireworks_poe_bot.fw_poe_video_bot import FireworksPoeVideoBot
 from fireworks_poe_bot.logging import UVICORN_LOGGING_CONFIG
-from fireworks_poe_bot.plugin import (
-    LoggingPlugin,
-    register_logging_plugin,
-    BOT_PLUGINS,
-    log_info,
-)
+from fireworks_poe_bot.plugin import LoggingPlugin, register_logging_plugin, BOT_PLUGINS, log_info
 from sse_starlette.sse import ServerSentEvent
 
 
@@ -44,7 +39,6 @@ class PyLoggingPlugin(LoggingPlugin):
 
     def log_error(self, payload: Dict[str, Any]):
         logging.error(payload)
-
 
 def main(args=None):
     if args is None:
@@ -108,7 +102,7 @@ def main(args=None):
                     environment=args.environment,
                     deployment=args.deployment,
                     server_version="0.0.1",  # FIXME: versioneer?
-                    **ctor_dict,
+                    **ctor_dict
                 )
 
     if len(remaining_config_keys) > 0:
@@ -116,11 +110,12 @@ def main(args=None):
             f"Unknown config keys: {remaining_config_keys}, supported keys: {set([plugin.config_key for plugin in BOT_PLUGINS])}"
         )
 
-    log_info({"message": f"Loaded bots: {bots}"})
+    log_info({'message': f"Loaded bots: {bots}"})
 
     assert (
         len(bots) > 0
     ), "No bots specified, use --text-models or --image-models to specify models to serve"
+
 
     # Bot that proxies into the bots contained in the `bots` dictionary above
     class FWProxyBot(fastapi_poe.PoeBot):
@@ -136,13 +131,9 @@ def main(args=None):
 
         def find_bot_from_query_params(self, params) -> fastapi_poe.PoeBot:
             if "account" not in params:
-                raise HTTPException(
-                    status_code=400, detail=f"Missing account query parameter"
-                )
+                raise HTTPException(status_code=400, detail=f"Missing account query parameter")
             if "model" not in params:
-                raise HTTPException(
-                    status_code=400, detail=f"Missing model query parameter"
-                )
+                raise HTTPException(status_code=400, detail=f"Missing model query parameter")
             return self.find_bot(params["account"], params["model"])
 
         async def get_response_with_context(
