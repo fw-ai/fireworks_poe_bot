@@ -94,7 +94,6 @@ class TestFWPoeBot(unittest.IsolatedAsyncioTestCase):
             user_id="",
             conversation_id="",
             message_id="",
-            http_request=self.FakeRequest(),
         )
         resp_fragments = []
         async for resp in self.bot.get_response(query_request):
