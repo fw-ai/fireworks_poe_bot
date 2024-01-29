@@ -32,14 +32,12 @@ import numpy as np
 from google.cloud import storage
 import traceback
 
-
 class ImageModelConfig(ModelConfig):
     gcs_bucket_name: str
     num_steps: int = 25
     multi_turn: bool = True
 
     meta_response: Optional[MetaResponse] = None
-
 
 @register_bot_plugin("image_models", ImageModelConfig)
 class FireworksPoeImageBot(PoeBot):
@@ -189,9 +187,7 @@ class FireworksPoeImageBot(PoeBot):
 
             # Ensure last message is a user message
             if messages[-1]["role"] != "user":
-                self._log_warn(
-                    {"msg": f"Last message {messages[-1]} not a user message"}
-                )
+                self._log_warn({"msg": f"Last message {messages[-1]} not a user message"})
                 messages.append({"role": "user", "content": ""})
 
             log_query = copy.copy(query.dict())
@@ -200,6 +196,7 @@ class FireworksPoeImageBot(PoeBot):
                     "msg": "Request received",
                     **log_query,
                     "processed_msgs": messages,
+
                 }
             )
 

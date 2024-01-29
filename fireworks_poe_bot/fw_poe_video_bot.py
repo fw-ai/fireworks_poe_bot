@@ -36,17 +36,16 @@ class VideoModelConfig(ModelConfig):
 
 @register_bot_plugin("video_models", VideoModelConfig)
 class FireworksPoeVideoBot(PoeBot):
-    def __init__(
-        self,
-        model: str,
-        api_key: str,
-        environment: str,
-        deployment: str,
-        server_version: str,
-        poe_bot_access_key: str,
-        text2image_model_name: str,
-        text2image_num_steps: int,
-        meta_response: Optional[MetaResponse],
+    def __init__(self,
+            model: str,
+            api_key: str,
+            environment: str,
+            deployment: str,
+            server_version: str,
+            poe_bot_access_key: str,
+            text2image_model_name: str,
+            text2image_num_steps: int,
+            meta_response: Optional[MetaResponse],
     ):
         super().__init__()
         self.model = model
@@ -73,13 +72,12 @@ class FireworksPoeVideoBot(PoeBot):
         self.model = model_atoms[3]
 
         self.client = ImageInference(account=self.account, model=self.model)
-        self.text2img_client = ImageInference(
-            account=self.account, model=self.text2image_model_name
-        )
+        self.text2img_client = ImageInference(account=self.account, model=self.text2image_model_name)
         if meta_response:
             self.meta_response = MetaResponse(**meta_response)
         else:
             self.meta_response = meta_response
+
 
     def _log_warn(self, payload: Dict):
         payload = copy.copy(payload)
@@ -176,26 +174,20 @@ class FireworksPoeVideoBot(PoeBot):
 
                 elapsed_sec = 0
                 while not img_gen_task.done():
-                    yield self.replace_response_event(
-                        text=f"Generating image... ({elapsed_sec} seconds)"
-                    )
+                    yield self.replace_response_event(text=f"Generating image... ({elapsed_sec} seconds)")
                     await asyncio.sleep(1)
                     elapsed_sec += 1
 
                 img_answer: Answer = await img_gen_task
                 if img_answer.finish_reason == "CONTENT_FILTERED":
-                    yield self.replace_response_event(
-                        text="Your message was filtered by the content filter. Please try again with a different message."
-                    )
+                    yield self.replace_response_event(text="Your message was filtered by the content filter. Please try again with a different message.")
                     return
                 img_pil = img_answer.image
             elif len(protocol_message.attachments) == 1:
                 attachment = protocol_message.attachments[0]
                 if attachment.content_type not in ["image/png", "image/jpeg"]:
                     # FIXME: more image types?
-                    yield self.replace_response_event(
-                        text=f"Invalid image type {attachment.content_type}, expected a PNG or JPEG image"
-                    )
+                    yield self.replace_response_event(text=f"Invalid image type {attachment.content_type}, expected a PNG or JPEG image")
                     return
 
                 try:
@@ -206,9 +198,7 @@ class FireworksPoeVideoBot(PoeBot):
                     yield ErrorResponse(allow_retry=False, text=str(e))
                     raise RuntimeError(str(e))
             else:
-                yield self.replace_response_event(
-                    text="Please upload a single image attachment to generate a video"
-                )
+                yield self.replace_response_event(text="Please upload a single image attachment to generate a video")
                 return
 
             assert img_pil is not None
@@ -232,9 +222,7 @@ class FireworksPoeVideoBot(PoeBot):
 
             elapsed_sec = 0
             while not inference_task.done():
-                yield self.replace_response_event(
-                    text=f"Generating video... ({elapsed_sec} seconds)"
-                )
+                yield self.replace_response_event(text=f"Generating video... ({elapsed_sec} seconds)")
                 await asyncio.sleep(1)
                 elapsed_sec += 1
 
@@ -243,19 +231,14 @@ class FireworksPoeVideoBot(PoeBot):
 
             # Upload file as attachment
             await self.post_message_attachment(
-                self.poe_bot_access_key,
-                query.message_id,
-                file_data=video,
-                filename="video.mp4",
+                self.poe_bot_access_key, query.message_id, file_data=video, filename="video.mp4"
             )
             end_t_inference = time.time()
 
             if answer.finish_reason == "CONTENT_FILTERED":
                 response_text = "Your video was generated, but it was filtered by the content filter. Please try again with a different image."
             else:
-                response_text = (
-                    "Your video was generated. Please download the attachment."
-                )
+                response_text = "Your video was generated. Please download the attachment."
 
             end_t = time.time()
             elapsed_sec = end_t - start_t
@@ -291,6 +274,7 @@ class FireworksPoeVideoBot(PoeBot):
             return
         finally:
             fireworks.client.api_key = orig_api_key
+
 
     async def get_settings(self, setting: SettingsRequest) -> SettingsResponse:
         """Override this to return non-standard settings."""

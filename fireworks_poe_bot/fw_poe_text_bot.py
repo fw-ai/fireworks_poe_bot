@@ -236,16 +236,16 @@ class FireworksPoeTextBot(PoeBot):
                     cumulative_image_size_mb += len(img_base64) / 1024 / 1024
                 else:
                     messages.append({"role": role, "content": protocol_message.content})
-
+                    
             if num_images > 1:
                 # We want to remove all the images except the last one
                 # since the current VLM model does not support multi-image
                 last_image_kept = False
                 for message in messages[::-1]:
-                    if isinstance(message["content"], list):
+                    if isinstance(message['content'], list):
                         # content being a list means it contains an image
                         if last_image_kept:
-                            message["content"] = message["content"][0]["text"]
+                            message['content'] = message['content'][0]['text']
                         else:
                             last_image_kept = True
 
@@ -253,10 +253,7 @@ class FireworksPoeTextBot(PoeBot):
                 if len(messages) == 0 or messages[0]["role"] != "system":
                     system_prompt_msg = {
                         "role": "system",
-                        "content": {
-                            "type": "text",
-                            "text": self.system_prompt_override,
-                        },
+                        "content": {"type": "text", "text": self.system_prompt_override}
                     }
                     messages.insert(0, system_prompt_msg)
 
@@ -288,16 +285,8 @@ class FireworksPoeTextBot(PoeBot):
                         user_message["role"] = "input"
                         # HACKS: move the image to the instruction message
                         if isinstance(user_message["content"], list):
-                            content_non_image = [
-                                x
-                                for x in user_message["content"]
-                                if (not isinstance(x, dict)) or x["type"] != "image_url"
-                            ]
-                            content_image = [
-                                x
-                                for x in user_message["content"]
-                                if isinstance(x, dict) and x["type"] == "image_url"
-                            ]
+                            content_non_image = [x for x in  user_message['content'] if (not isinstance(x, dict)) or x["type"] != "image_url"]
+                            content_image = [x for x in user_message['content'] if isinstance(x, dict) and x["type"] == "image_url"]
                             if content_image:
                                 new_messages[-1]["content"].append(content_image[0])
                             user_message["content"] = content_non_image
@@ -347,18 +336,14 @@ class FireworksPoeTextBot(PoeBot):
                     return " ".join(text)
 
                 for role, group in groupby(messages, key=lambda x: x["role"]):
-                    content = merge_messages_groups(
-                        [message["content"] for message in group]
-                    )
+                    content = merge_messages_groups([message["content"] for message in group])
                     merged_messages.append({"role": role, "content": content})
 
                 messages = merged_messages
 
                 # Ensure last message is a user message
                 if messages[-1]["role"] != "user":
-                    self._log_warn(
-                        {"msg": f"Last message {messages[-1]} not a user message"}
-                    )
+                    self._log_warn({"msg": f"Last message {messages[-1]} not a user message"})
                     messages.append({"role": "user", "content": ""})
 
             log_query = copy.copy(query.dict())
