@@ -236,7 +236,7 @@ class FireworksPoeTextBot(PoeBot):
                     cumulative_image_size_mb += len(img_base64) / 1024 / 1024
                 else:
                     messages.append({"role": role, "content": protocol_message.content})
-                    
+
             if num_images > 1:
                 # We want to remove all the images except the last one
                 # since the current VLM model does not support multi-image
@@ -345,6 +345,16 @@ class FireworksPoeTextBot(PoeBot):
                 if messages[-1]["role"] != "user":
                     self._log_warn({"msg": f"Last message {messages[-1]} not a user message"})
                     messages.append({"role": "user", "content": ""})
+
+                # Ensure that all user messages before the last are followed by an assistant message
+                for i in range(len(messages) - 1):
+                    if messages[i]["role"] == "user" and messages[i + 1]["role"] != "assistant":
+                        self._log_warn(
+                            {
+                                "msg": f"User message {messages[i]} not followed by assistant message"
+                            }
+                        )
+                        messages.insert(i + 1, {"role": "assistant", "content": ""})
 
             log_query = copy.copy(query.dict())
             log_query.pop("http_request")
