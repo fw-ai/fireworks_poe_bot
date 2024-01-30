@@ -204,7 +204,6 @@ class FireworksPoeVideoBot(PoeBot):
             assert img_pil is not None
 
             log_query = copy.copy(query.dict())
-            log_query.pop("http_request")
             self._log_info(
                 {
                     "msg": "Request received",

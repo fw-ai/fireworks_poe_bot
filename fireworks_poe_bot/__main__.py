@@ -5,11 +5,12 @@ from fireworks_poe_bot.fw_poe_qr_bot import FireworksPoeQRBot
 from fireworks_poe_bot.fw_poe_video_bot import FireworksPoeVideoBot
 from fireworks_poe_bot.logging import UVICORN_LOGGING_CONFIG
 from fireworks_poe_bot.plugin import LoggingPlugin, register_logging_plugin, BOT_PLUGINS, log_info
+from sse_starlette.sse import ServerSentEvent
 
 
 import argparse
 from dataclasses import dataclass
-from typing import Any, Dict
+from typing import Any, AsyncIterable, Dict, Union
 import fastapi
 import fastapi_poe
 from fastapi import HTTPException
@@ -135,23 +136,36 @@ def main(args=None):
                 raise HTTPException(status_code=400, detail=f"Missing model query parameter")
             return self.find_bot(params["account"], params["model"])
 
-        async def get_response(self, request: fastapi_poe.QueryRequest):
-            bot = self.find_bot_from_query_params(request.http_request.query_params)
-            async for resp in bot.get_response(request):
-                yield resp
+        async def get_response_with_context(
+            self, request: fastapi_poe.QueryRequest, context: fastapi_poe.RequestContext
+        ) -> AsyncIterable[Union[fastapi_poe.PartialResponse, ServerSentEvent]]:
+            bot = self.find_bot_from_query_params(context.http_request.query_params)
+            async for event in bot.get_response(request):
+                yield event
 
-        async def get_settings(self, setting: fastapi_poe.SettingsRequest) -> fastapi_poe.SettingsResponse:
-            bot = self.find_bot_from_query_params(setting.http_request.query_params)
+        async def get_settings_with_context(
+            self,
+            setting: fastapi_poe.SettingsRequest,
+            context: fastapi_poe.RequestContext,
+        ) -> fastapi_poe.SettingsResponse:
+            bot = self.find_bot_from_query_params(context.http_request.query_params)
             return await bot.get_settings(setting)
 
-        async def on_feedback(self, feedback_request: fastapi_poe.ReportFeedbackRequest) -> None:
-            bot = self.find_bot_from_query_params(feedback_request.http_request.query_params)
+        async def on_feedback_with_context(
+            self,
+            feedback_request: fastapi_poe.ReportFeedbackRequest,
+            context: fastapi_poe.RequestContext,
+        ) -> None:
+            bot = self.find_bot_from_query_params(context.http_request.query_params)
             await bot.on_feedback(feedback_request)
 
-        async def on_error(self, error_request: fastapi_poe.ReportErrorRequest) -> None:
-            bot = self.find_bot_from_query_params(error_request.http_request.query_params)
+        async def on_error_with_context(
+            self,
+            error_request: fastapi_poe.ReportErrorRequest,
+            context: fastapi_poe.RequestContext,
+        ) -> None:
+            bot = self.find_bot_from_query_params(context.http_request.query_params)
             await bot.on_error(error_request)
-
 
     app = make_app(FWProxyBot(bots), allow_without_key=True)
 

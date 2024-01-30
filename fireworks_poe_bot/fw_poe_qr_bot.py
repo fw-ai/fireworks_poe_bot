@@ -258,7 +258,6 @@ class FireworksPoeQRBot(PoeBot):
             prompt = messages[-1]["content"]
 
             log_query = copy.copy(query.dict())
-            log_query.pop("http_request")
             self._log_info(
                 {
                     "msg": "Request received",
