@@ -331,6 +331,9 @@ class FireworksPoeTextBot(PoeBot):
                             assert msg[0]["type"] == "text"
                             text.append(msg[0]["text"])
                             images.extend(msg[1:])
+                        elif isinstance(msg, dict):
+                            assert msg["type"] == "text"
+                            text.append(msg["text"])
                     if images:
                         return [{"type": "text", "text": " ".join(text)}, *images]
                     return " ".join(text)
