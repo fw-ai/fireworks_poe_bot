@@ -437,8 +437,7 @@ class FireworksPoeTextBot(PoeBot):
         return SettingsResponse(allow_attachments=self.allow_attachments)
 
     async def on_feedback(self, feedback_request: ReportFeedbackRequest) -> None:
-        """Override this to record feedback from the user."""
-        pass
+        self._log_info(feedback_request.dict())
 
     async def on_error(self, error_request: ReportErrorRequest) -> None:
         """Override this to record errors from the Poe server."""
