@@ -209,7 +209,7 @@ class FireworksPoeTextBot(PoeBot):
                 if protocol_message.content_type not in {"text/plain", "text/markdown"}:
                     self._log_warn({"msg": "Unknown content type", **log_msg})
                     continue
-                img_base64 = None
+                img_buffer = None
                 if protocol_message.role == "bot":
                     role = "assistant"
                 else:
@@ -249,7 +249,7 @@ class FireworksPoeTextBot(PoeBot):
                 else:
                     messages.append({"role": role, "content": protocol_message.content})
 
-            if num_images > 1:
+            if num_images >= 1:
                 # We want to remove all the images except the last one
                 # since the current VLM model does not support multi-image
                 last_image_kept = False
@@ -272,11 +272,10 @@ class FireworksPoeTextBot(PoeBot):
                                             "query": copy.copy(query.dict()),
                                         }
                                     )
-                                    yield ErrorResponse(
-                                        allow_retry=False,
-                                        error_type="image_contains_NSFW_content",
-                                        text="Image provided contains NSFW content, disallowed",
+                                    yield PartialResponse(
+                                        text="Image provided contains NSFW content",
                                     )
+                                    yield ServerSentEvent(event="done")
                                     return
                                 # If image has no NSFW content, then update the image to
                                 # be the base64 encoded string of the image in the message
@@ -298,8 +297,8 @@ class FireworksPoeTextBot(PoeBot):
                                 )
                                 yield ErrorResponse(
                                     allow_retry=False,
-                                    error_type="error_image_safety_check",
-                                    text=str(e),
+                                    text="Error performing image safety check: "
+                                    + str(e),
                                 )
                                 return
                             last_image_kept = True
@@ -494,7 +493,7 @@ class FireworksPoeTextBot(PoeBot):
                     "msg": "Invalid request",
                     "error": "\n".join(traceback.format_exception(e)),
                     "elapsed_sec": end_t - start_t,
-                    "query": log_query,
+                    "query": copy.copy(query.dict()),
                 }
             )
             if "prompt is too long" in str(e):
