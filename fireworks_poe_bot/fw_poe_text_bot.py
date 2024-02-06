@@ -307,10 +307,7 @@ class FireworksPoeTextBot(PoeBot):
                 if len(messages) == 0 or messages[0]["role"] != "system":
                     system_prompt_msg = {
                         "role": "system",
-                        "content": {
-                            "type": "text",
-                            "text": self.system_prompt_override,
-                        },
+                        "content": {"type": "text", "text": self.system_prompt_override},
                     }
                     messages.insert(0, system_prompt_msg)
 
