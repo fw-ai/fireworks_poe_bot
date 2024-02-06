@@ -123,7 +123,7 @@ class FireworksPoeTextBot(PoeBot):
         )
         log_error(payload)
 
-    async def _image_has_nsfw_content(self, image_binary: bytes):
+    async def _image_has_nsfw_content(self, image_binary: bytes) -> bool:
         files = {
             "image": image_binary,
         }
@@ -262,9 +262,9 @@ class FireworksPoeTextBot(PoeBot):
                             image_binary = message["content"][1]["image_url"]["url"]
                             # Check for NSFW content
                             try:
-                                if self._image_has_nsfw_content(image_binary):
+                                if await self._image_has_nsfw_content(image_binary):
                                     end_t = time.time()
-                                    self._log_error(
+                                    self._log_warn(
                                         {
                                             "msg": "Invalid request",
                                             "error": "Image provided contains NSFW content",
