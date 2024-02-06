@@ -123,16 +123,16 @@ class FireworksPoeTextBot(PoeBot):
         )
         log_error(payload)
 
-    def _image_has_nsfw_content(self, image_binary: bytes):
+    async def _image_has_nsfw_content(self, image_binary: bytes):
         files = {
             "image": image_binary,
         }
         headers = {"Authorization": f"Bearer {self.api_key}"}
-        with httpx.Client(
+        async with httpx.AsyncClient(
             headers=headers,
         ) as client:
             endpoint_base_uri = "https://api.fireworks.ai/inference/v1/image_generation/image_safety_checker"
-            response = client.post(
+            response = await client.post(
                 endpoint_base_uri,
                 files=files,
             )
