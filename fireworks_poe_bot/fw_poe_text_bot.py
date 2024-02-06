@@ -342,16 +342,8 @@ class FireworksPoeTextBot(PoeBot):
                         user_message["role"] = "input"
                         # HACKS: move the image to the instruction message
                         if isinstance(user_message["content"], list):
-                            content_non_image = [
-                                x
-                                for x in user_message["content"]
-                                if (not isinstance(x, dict)) or x["type"] != "image_url"
-                            ]
-                            content_image = [
-                                x
-                                for x in user_message["content"]
-                                if isinstance(x, dict) and x["type"] == "image_url"
-                            ]
+                            content_non_image = [x for x in  user_message['content'] if (not isinstance(x, dict)) or x["type"] != "image_url"]
+                            content_image = [x for x in user_message['content'] if isinstance(x, dict) and x["type"] == "image_url"]
                             if content_image:
                                 new_messages[-1]["content"].append(content_image[0])
                             user_message["content"] = content_non_image
@@ -404,26 +396,19 @@ class FireworksPoeTextBot(PoeBot):
                     return " ".join(text)
 
                 for role, group in groupby(messages, key=lambda x: x["role"]):
-                    content = merge_messages_groups(
-                        [message["content"] for message in group]
-                    )
+                    content = merge_messages_groups([message["content"] for message in group])
                     merged_messages.append({"role": role, "content": content})
 
                 messages = merged_messages
 
                 # Ensure last message is a user message
                 if messages[-1]["role"] != "user":
-                    self._log_warn(
-                        {"msg": f"Last message {messages[-1]} not a user message"}
-                    )
+                    self._log_warn({"msg": f"Last message {messages[-1]} not a user message"})
                     messages.append({"role": "user", "content": ""})
 
                 # Ensure that all user messages before the last are followed by an assistant message
                 for i in range(len(messages) - 1):
-                    if (
-                        messages[i]["role"] == "user"
-                        and messages[i + 1]["role"] != "assistant"
-                    ):
+                    if messages[i]["role"] == "user" and messages[i + 1]["role"] != "assistant":
                         self._log_warn(
                             {
                                 "msg": f"User message {messages[i]} not followed by assistant message"
