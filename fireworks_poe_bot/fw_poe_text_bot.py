@@ -40,6 +40,7 @@ class TextModelConfig(ModelConfig):
     # "alpaca" or None
     chat_format: Optional[str] = None
     alpaca_instruction_msg: Optional[str] = None
+    vlm_input_image_safety_check: Optional[bool] = False
 
     meta_response: Optional[MetaResponse] = None
 
@@ -61,6 +62,7 @@ class FireworksPoeTextBot(PoeBot):
         additional_args: Optional[Dict[str, int | str]],
         chat_format: Optional[str],
         alpaca_instruction_msg: Optional[str],
+        vlm_input_image_safety_check: Optional[bool],
         meta_response: Optional[MetaResponse],
         completion_async_method: Callable = ChatCompletion.acreate,
     ):
@@ -77,6 +79,7 @@ class FireworksPoeTextBot(PoeBot):
         self.max_tokens = max_tokens
         self.chat_format = chat_format
         self.alpaca_instruction_msg = alpaca_instruction_msg
+        self.vlm_input_image_safety_check = vlm_input_image_safety_check
         self.system_prompt_override = system_prompt_override
         self.additional_args = additional_args or {}
         if meta_response:
@@ -262,21 +265,22 @@ class FireworksPoeTextBot(PoeBot):
                             image_binary = message["content"][1]["image_url"]["url"]
                             # Check for NSFW content
                             try:
-                                if await self._image_has_nsfw_content(image_binary):
-                                    end_t = time.time()
-                                    self._log_warn(
-                                        {
-                                            "msg": "Invalid request",
-                                            "error": "Image provided contains NSFW content",
-                                            "elapsed_sec": end_t - start_t,
-                                            "query": copy.copy(query.dict()),
-                                        }
-                                    )
-                                    yield PartialResponse(
-                                        text="Image provided contains NSFW content",
-                                    )
-                                    yield ServerSentEvent(event="done")
-                                    return
+                                if self.vlm_input_image_safety_check:
+                                    if await self._image_has_nsfw_content(image_binary):
+                                        end_t = time.time()
+                                        self._log_warn(
+                                            {
+                                                "msg": "Invalid request",
+                                                "error": "Image provided contains NSFW content",
+                                                "elapsed_sec": end_t - start_t,
+                                                "query": copy.copy(query.dict()),
+                                            }
+                                        )
+                                        yield PartialResponse(
+                                            text="Image provided contains NSFW content",
+                                        )
+                                        yield ServerSentEvent(event="done")
+                                        return
                                 # If image has no NSFW content, then update the image to
                                 # be the base64 encoded string of the image in the message
                                 img_base64 = "data:image/jpeg;base64,{}".format(
