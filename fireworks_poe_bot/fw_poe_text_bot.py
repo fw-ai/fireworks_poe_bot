@@ -40,6 +40,7 @@ class TextModelConfig(ModelConfig):
     # "alpaca" or None
     chat_format: Optional[str] = None
     alpaca_instruction_msg: Optional[str] = None
+    vlm_input_image_safety_check: Optional[bool] = False
 
     meta_response: Optional[MetaResponse] = None
 
@@ -61,6 +62,7 @@ class FireworksPoeTextBot(PoeBot):
         additional_args: Optional[Dict[str, int | str]],
         chat_format: Optional[str],
         alpaca_instruction_msg: Optional[str],
+        vlm_input_image_safety_check: Optional[bool],
         meta_response: Optional[MetaResponse],
         completion_async_method: Callable = ChatCompletion.acreate,
     ):
@@ -77,6 +79,7 @@ class FireworksPoeTextBot(PoeBot):
         self.max_tokens = max_tokens
         self.chat_format = chat_format
         self.alpaca_instruction_msg = alpaca_instruction_msg
+        self.vlm_input_image_safety_check = vlm_input_image_safety_check
         self.system_prompt_override = system_prompt_override
         self.additional_args = additional_args or {}
         if meta_response:
@@ -123,10 +126,25 @@ class FireworksPoeTextBot(PoeBot):
         )
         log_error(payload)
 
-    async def download_image_and_encode_to_base64(
+    async def _image_has_nsfw_content(self, image_binary: bytes) -> bool:
+        files = {
+            "image": image_binary,
+        }
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        async with httpx.AsyncClient(
+            headers=headers,
+        ) as client:
+            endpoint_base_uri = "https://api.fireworks.ai/inference/v1/image_generation/image_safety_checker"
+            response = await client.post(
+                endpoint_base_uri,
+                files=files,
+            )
+            return response.json().get("has_nsfw_content", False)
+
+    async def download_image_and_save_to_bytes(
         self,
         url: str,
-    ) -> str:
+    ) -> bytes:
         async with httpx.AsyncClient() as client:
             image_download_start = time.perf_counter()
             r = await client.get(url)
@@ -150,9 +168,6 @@ class FireworksPoeTextBot(PoeBot):
                 buffered = io.BytesIO()
                 pil_img_resized.save(buffered, format="JPEG")
                 img_buffer = buffered.getvalue()
-                img = "data:image/jpeg;base64,{}".format(
-                    base64.b64encode(img_buffer).decode("utf-8")
-                )
                 resize_encode_end = time.perf_counter()
                 self._log_info(
                     {
@@ -165,7 +180,7 @@ class FireworksPoeTextBot(PoeBot):
                         "url": url,
                     }
                 )
-                return img
+                return img_buffer
             raise Exception(f"Unable to download image, error code {r.status_code}")
 
     async def get_response(
@@ -197,7 +212,7 @@ class FireworksPoeTextBot(PoeBot):
                 if protocol_message.content_type not in {"text/plain", "text/markdown"}:
                     self._log_warn({"msg": "Unknown content type", **log_msg})
                     continue
-                img_base64 = None
+                img_buffer = None
                 if protocol_message.role == "bot":
                     role = "assistant"
                 else:
@@ -206,14 +221,14 @@ class FireworksPoeTextBot(PoeBot):
                         0
                     ].content_type in ["image/png", "image/jpeg"]:
                         try:
-                            img_base64 = await self.download_image_and_encode_to_base64(
+                            img_buffer = await self.download_image_and_save_to_bytes(
                                 protocol_message.attachments[0].url
                             )
                         except Exception as e:
                             yield ErrorResponse(allow_retry=False, text=str(e))
                             raise RuntimeError(str(e))
 
-                if img_base64:
+                if img_buffer:
                     num_images += 1
                     if cumulative_image_size_mb > 8:
                         # Apigee has a limit of 10MB for payload, we set image total limit to 8MB
@@ -228,32 +243,75 @@ class FireworksPoeTextBot(PoeBot):
                                 {"type": "text", "text": protocol_message.content},
                                 {
                                     "type": "image_url",
-                                    "image_url": {"url": img_base64},
+                                    "image_url": {"url": img_buffer},
                                 },
                             ],
                         }
                     )
-                    cumulative_image_size_mb += len(img_base64) / 1024 / 1024
+                    cumulative_image_size_mb += len(img_buffer) / 1024 / 1024
                 else:
                     messages.append({"role": role, "content": protocol_message.content})
 
-            if num_images > 1:
+            if num_images >= 1:
                 # We want to remove all the images except the last one
                 # since the current VLM model does not support multi-image
                 last_image_kept = False
                 for message in messages[::-1]:
-                    if isinstance(message['content'], list):
+                    if isinstance(message["content"], list):
                         # content being a list means it contains an image
                         if last_image_kept:
-                            message['content'] = message['content'][0]['text']
+                            message["content"] = message["content"][0]["text"]
                         else:
+                            image_binary = message["content"][1]["image_url"]["url"]
+                            # Check for NSFW content
+                            try:
+                                if self.vlm_input_image_safety_check:
+                                    if await self._image_has_nsfw_content(image_binary):
+                                        end_t = time.time()
+                                        self._log_warn(
+                                            {
+                                                "msg": "Invalid request",
+                                                "error": "Image provided contains NSFW content",
+                                                "elapsed_sec": end_t - start_t,
+                                                "query": copy.copy(query.dict()),
+                                            }
+                                        )
+                                        yield PartialResponse(
+                                            text="Image provided contains NSFW content",
+                                        )
+                                        yield ServerSentEvent(event="done")
+                                        return
+                                # If image has no NSFW content, then update the image to
+                                # be the base64 encoded string of the image in the message
+                                img_base64 = "data:image/jpeg;base64,{}".format(
+                                    base64.b64encode(image_binary).decode("utf-8")
+                                )
+                                message["content"][1]["image_url"]["url"] = img_base64
+                            except Exception as e:
+                                end_t = time.time()
+                                self._log_error(
+                                    {
+                                        "msg": "Invalid request",
+                                        "error": "\n".join(
+                                            traceback.format_exception(e)
+                                        ),
+                                        "elapsed_sec": end_t - start_t,
+                                        "query": copy.copy(query.dict()),
+                                    }
+                                )
+                                yield ErrorResponse(
+                                    allow_retry=False,
+                                    text="Error performing image safety check: "
+                                    + str(e),
+                                )
+                                return
                             last_image_kept = True
 
             if self.system_prompt_override is not None:
                 if len(messages) == 0 or messages[0]["role"] != "system":
                     system_prompt_msg = {
                         "role": "system",
-                        "content": {"type": "text", "text": self.system_prompt_override}
+                        "content": {"type": "text", "text": self.system_prompt_override},
                     }
                     messages.insert(0, system_prompt_msg)
 
@@ -421,7 +479,7 @@ class FireworksPoeTextBot(PoeBot):
                     "msg": "Invalid request",
                     "error": "\n".join(traceback.format_exception(e)),
                     "elapsed_sec": end_t - start_t,
-                    "query": log_query,
+                    "query": copy.copy(query.dict()),
                 }
             )
             if "prompt is too long" in str(e):
