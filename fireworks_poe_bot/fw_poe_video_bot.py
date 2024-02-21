@@ -31,6 +31,8 @@ class VideoModelConfig(ModelConfig):
     text2image_model_name: str = "stable-diffusion-xl-1024-v1-0"
     text2image_num_steps: int = 50
 
+    frame_interpolation_factor: int = 4
+
     meta_response: Optional[MetaResponse] = None
 
 
@@ -45,6 +47,7 @@ class FireworksPoeVideoBot(PoeBot):
             poe_bot_access_key: str,
             text2image_model_name: str,
             text2image_num_steps: int,
+            frame_interpolation_factor: int,
             meta_response: Optional[MetaResponse],
     ):
         super().__init__()
@@ -56,6 +59,7 @@ class FireworksPoeVideoBot(PoeBot):
         self.poe_bot_access_key = poe_bot_access_key
         self.text2image_model_name = text2image_model_name
         self.text2image_num_steps = text2image_num_steps
+        self.frame_interpolation_factor = frame_interpolation_factor
 
         model_atoms = model.split("/")
         if len(model_atoms) != 4:
@@ -215,7 +219,7 @@ class FireworksPoeVideoBot(PoeBot):
                 self.client.image_to_video_async(
                     input_image=img_pil,
                     safety_check=True,
-                    frame_interpolation_factor=2,
+                    frame_interpolation_factor=self.frame_interpolation_factor,
                     # TODO: more params
                 )
             )
