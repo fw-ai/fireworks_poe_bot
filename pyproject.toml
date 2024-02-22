@@ -23,7 +23,7 @@ dependencies = [
     "pydantic>2",
     "sse-starlette>=1.0.0",
     "fastapi-poe>=0.0.29",
-    "fireworks-ai>=0.6.0",
+    "fireworks-ai>=0.12.1",
     "uvicorn>=0.23.2",
     "typing_extensions>=4.0.0",
     "opencv-python",
