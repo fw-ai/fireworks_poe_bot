@@ -244,7 +244,7 @@ class FireworksPoeVideoBot(PoeBot):
                     frame_interpolation_factor=self.frame_interpolation_factor,
                     fps=self.fps,
                     steps=self.steps,
-                    frames=self.frames,
+                    frames=self.num_frames,
                     output_video_bitrate=self.video_bitrate,
                 )
             )
