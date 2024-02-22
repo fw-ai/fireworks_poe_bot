@@ -10,7 +10,7 @@ RUN pip3 install --upgrade pip
 
 # Install the required Python packages
 RUN pip3 install fastapi-poe>=0.0.31 \
-    'fireworks-ai>=0.11.2' \
+    'fireworks-ai>=0.12.1' \
     boto3 \
     Pillow
 
