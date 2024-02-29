@@ -239,7 +239,7 @@ class FireworksPoeVideoBot(PoeBot):
             supported_HW.sort(
                 key=lambda hw: abs(hw[0] / hw[1] - input_image_aspect_ratio)
             )
-            target_width, target_height = supported_HW[0]
+            target_height, target_width = supported_HW[0]
 
             inference_task = asyncio.create_task(
                 self.client.image_to_video_async(
