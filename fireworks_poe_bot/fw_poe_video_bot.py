@@ -228,6 +228,19 @@ class FireworksPoeVideoBot(PoeBot):
                 }
             )
 
+            supported_HW = [
+                (1024, 576),
+                (576, 1024),
+                (768, 768),
+            ]
+
+            input_image_aspect_ratio = img_pil.height / img_pil.width
+            # Find the closest supported resolution
+            supported_HW.sort(
+                key=lambda hw: abs(hw[0] / hw[1] - input_image_aspect_ratio)
+            )
+            target_width, target_height = supported_HW[0]
+
             inference_task = asyncio.create_task(
                 self.client.image_to_video_async(
                     input_image=img_pil,
@@ -237,6 +250,8 @@ class FireworksPoeVideoBot(PoeBot):
                     steps=self.steps,
                     frames=self.num_frames,
                     output_video_bitrate=self.video_bitrate,
+                    height=target_height,
+                    width=target_width,
                 )
             )
 
