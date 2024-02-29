@@ -165,15 +165,6 @@ class FireworksPoeVideoBot(PoeBot):
                 if protocol_message.role == "bot":
                     protocol_message.role = "assistant"
 
-            last_user_message = None
-            for protocol_message in query.query:
-                if protocol_message.role == "user":
-                    last_user_message = protocol_message.content
-
-            if not last_user_message:
-                yield self.text_event(text="No user message")
-                return
-
             img_pil: Optional[Image] = None
             if len(protocol_message.attachments) == 0:
                 img_gen_task = asyncio.create_task(
@@ -237,15 +228,30 @@ class FireworksPoeVideoBot(PoeBot):
                 }
             )
 
+            supported_HW = [
+                (1024, 576),
+                (576, 1024),
+                (768, 768),
+            ]
+
+            input_image_aspect_ratio = img_pil.height / img_pil.width
+            # Find the closest supported resolution
+            supported_HW.sort(
+                key=lambda hw: abs(hw[0] / hw[1] - input_image_aspect_ratio)
+            )
+            target_height, target_width = supported_HW[0]
+
             inference_task = asyncio.create_task(
                 self.client.image_to_video_async(
                     input_image=img_pil,
-                    safety_check=True,
+                    safety_check=False,   # Check is too shitty, disable it
                     frame_interpolation_factor=self.frame_interpolation_factor,
                     fps=self.fps,
                     steps=self.steps,
                     frames=self.num_frames,
                     output_video_bitrate=self.video_bitrate,
+                    height=target_height,
+                    width=target_width,
                 )
             )
 
