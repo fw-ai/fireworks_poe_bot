@@ -24,6 +24,7 @@ from fireworks_poe_bot.config import ModelConfig
 import fireworks.client
 from fireworks.client.image import ImageInference, Answer, AnswerVideo
 
+INTRODUCTION_MESSAGE = "Please provide either a text description or an image to generate a video. If both are provided, the text description will be ignored."
 
 class VideoModelConfig(ModelConfig):
     poe_bot_access_key: str
@@ -149,6 +150,7 @@ class FireworksPoeVideoBot(PoeBot):
         fireworks.client.api_key = self.api_key
         try:
             start_t = time.time()
+            elapsed_sec = 0
 
             for protocol_message in query.query:
                 log_msg = protocol_message.dict()
@@ -181,7 +183,6 @@ class FireworksPoeVideoBot(PoeBot):
                     )
                 )
 
-                elapsed_sec = 0
                 while not img_gen_task.done():
                     yield self.replace_response_event(
                         text=f"Generating image... ({elapsed_sec} seconds)"
@@ -201,9 +202,12 @@ class FireworksPoeVideoBot(PoeBot):
                 if attachment.content_type not in ["image/png", "image/jpeg"]:
                     # FIXME: more image types?
                     yield self.replace_response_event(
-                        text=f"Invalid image type {attachment.content_type}, expected a PNG or JPEG image"
+                        text=f"Invalid image type {attachment.content_type}. Please try again with a PNG or JPEG image."
                     )
                     return
+
+                if protocol_message.content:
+                    yield PartialResponse(text="Ignoring text input since an image was provided.")
 
                 try:
                     img_pil = await self.download_image_and_encode_to_pil(
@@ -214,7 +218,7 @@ class FireworksPoeVideoBot(PoeBot):
                     raise RuntimeError(str(e))
             else:
                 yield self.replace_response_event(
-                    text="Please upload a single image attachment to generate a video"
+                    text="Multiple attachments are currently not supported. Please try again and upload a single image attachment to generate a video."
                 )
                 return
 
@@ -255,7 +259,6 @@ class FireworksPoeVideoBot(PoeBot):
                 )
             )
 
-            elapsed_sec = 0
             while not inference_task.done():
                 yield self.replace_response_event(
                     text=f"Generating video... ({elapsed_sec} seconds)"
@@ -275,12 +278,9 @@ class FireworksPoeVideoBot(PoeBot):
             )
             end_t_inference = time.time()
 
+            response_text = ""
             if answer.finish_reason == "CONTENT_FILTERED":
-                response_text = "Your video was generated, but it was filtered by the content filter. Please try again with a different image."
-            else:
-                response_text = (
-                    "Your video was generated. Please download the attachment."
-                )
+                response_text = "Your video was generated, but it was filtered by the content filter. Please try again with a different input."
 
             end_t = time.time()
             elapsed_sec = end_t - start_t
@@ -294,7 +294,8 @@ class FireworksPoeVideoBot(PoeBot):
                     "elapsed_sec_inference": end_t_inference - start_t,
                 }
             )
-            yield self.replace_response_event(text=response_text)
+            if response_text:
+                yield self.replace_response_event(text=response_text)
             yield ServerSentEvent(event="done")
             return
         except Exception as e:
@@ -319,7 +320,7 @@ class FireworksPoeVideoBot(PoeBot):
 
     async def get_settings(self, setting: SettingsRequest) -> SettingsResponse:
         """Override this to return non-standard settings."""
-        return SettingsResponse(allow_attachments=True)
+        return SettingsResponse(allow_attachments=True, introduction_message=INTRODUCTION_MESSAGE)
 
     async def on_feedback(self, feedback_request: ReportFeedbackRequest) -> None:
         """Override this to record feedback from the user."""
