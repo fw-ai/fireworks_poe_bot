@@ -28,10 +28,12 @@ import requests
 from google.cloud import storage
 import traceback
 import aiohttp
+import asyncio
 
 class StabilityImageModelConfig(ModelConfig):
     gcs_bucket_name: str
     stability_api_key: str
+    stability_url: str
 
     meta_response: Optional[MetaResponse] = None
 
@@ -46,6 +48,7 @@ class FireworksPoeStabilityImageBot(PoeBot):
         server_version: str,
         gcs_bucket_name: str,
         stability_api_key: str,
+        stability_url: str,
         meta_response: Optional[MetaResponse],
     ):
         super().__init__()
@@ -71,6 +74,7 @@ class FireworksPoeStabilityImageBot(PoeBot):
 
         self.gcs_bucket_name = gcs_bucket_name
         self.stability_api_key = stability_api_key
+        self.stability_url = stability_url
         if meta_response:
             self.meta_response = MetaResponse(**meta_response)
         else:
@@ -194,7 +198,6 @@ class FireworksPoeStabilityImageBot(PoeBot):
             assert messages[-1]["role"] == "user"
             prompt = messages[-1]["content"]
 
-            url = "https://api.stability.ai/v2beta/stable-image/generate/sd3"
             headers = {
                 "Authorization": f"Bearer {self.stability_api_key}",
                 "Accept": "image/*"
@@ -204,21 +207,35 @@ class FireworksPoeStabilityImageBot(PoeBot):
                 "output_format": "jpeg",
                 "model": self.model,
             }
-            # Using FormData to handle files and data
             form_data = aiohttp.FormData()
-            form_data.add_field('none', '')
+            form_data.add_field('none', '', content_type='application/octet-stream')  # Explicitly setting content type for file
             for key, value in data.items():
                 form_data.add_field(key, value)
 
-            # Create session and post data
-            async with aiohttp.ClientSession() as session:
-                async with session.post(url, headers=headers, data=form_data) as response:
-                    if not response.ok:
-                        raise Exception(f"Generation failed with error {response.reason}")
+            async def fetch_image():
+                # Create session and post data
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(self.stability_url, headers=headers, data=form_data) as response:
+                        if not response.ok:
+                            raise Exception(f"Generation failed with error {response.status} {response.reason} {await response.read()}")
 
-                    finish_reason = response.headers.get("finish_reason", "SUCCESS")
-                    image_data = await response.read()
-                    image = Image.open(io.BytesIO(image_data))
+                        finish_reason = response.headers.get("finish_reason", "SUCCESS")
+                        image_data = await response.read()
+                        image = Image.open(io.BytesIO(image_data))
+
+                return image, finish_reason
+
+            inference_task_timer = 0
+            inference_task = asyncio.create_task(fetch_image())
+
+            while not inference_task.done():
+                yield self.replace_response_event(
+                    text=f"Generating image... ({inference_task_timer} seconds)"
+                )
+                await asyncio.sleep(1)
+                inference_task_timer += 1
+
+            image, finish_reason = await inference_task
 
             end_t_inference = time.time()
             start_t_encode = time.time()
@@ -244,7 +261,7 @@ class FireworksPoeStabilityImageBot(PoeBot):
                     "elapsed_sec_upload": end_t - start_t_encode,
                 }
             )
-            yield PartialResponse(text=response_text)
+            yield self.replace_response_event(text=response_text)
             yield ServerSentEvent(event="done")
             return
         except Exception as e:
@@ -263,8 +280,6 @@ class FireworksPoeStabilityImageBot(PoeBot):
                 error_type = None
             yield ErrorResponse(allow_retry=False, error_type=error_type, text=str(e))
             return
-        finally:
-            fireworks.client.api_key = orig_api_key
 
     # Function to upload a PIL Image to an S3 bucket with a presigned URL
     def _upload_image_to_s3_with_ttl(

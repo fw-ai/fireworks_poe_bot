@@ -3,7 +3,7 @@ from fireworks_poe_bot.fw_poe_text_bot import FireworksPoeTextBot
 from fireworks_poe_bot.fw_poe_image_bot import FireworksPoeImageBot
 from fireworks_poe_bot.fw_poe_qr_bot import FireworksPoeQRBot
 from fireworks_poe_bot.fw_poe_video_bot import FireworksPoeVideoBot
-from fireworks_poe_bot.fw_poe_stability_image_bot import FireworksPoeImageBot
+from fireworks_poe_bot.fw_poe_stability_image_bot import FireworksPoeStabilityImageBot
 from fireworks_poe_bot.logging import UVICORN_LOGGING_CONFIG
 from fireworks_poe_bot.plugin import LoggingPlugin, register_logging_plugin, BOT_PLUGINS, log_info
 from sse_starlette.sse import ServerSentEvent
