@@ -36,7 +36,7 @@ class StabilityImageModelConfig(ModelConfig):
     meta_response: Optional[MetaResponse] = None
 
 @register_bot_plugin("stability_image_models", StabilityImageModelConfig)
-class FireworksPoeImageBot(PoeBot):
+class FireworksPoeStabilityImageBot(PoeBot):
     def __init__(
         self,
         model: str,
@@ -68,9 +68,6 @@ class FireworksPoeImageBot(PoeBot):
 
         self.account = model_atoms[1]
         self.model = model_atoms[3]
-
-        self.client = ImageInference(account=self.account, model=self.model)
-
 
         self.gcs_bucket_name = gcs_bucket_name
         self.stability_api_key = stability_api_key
