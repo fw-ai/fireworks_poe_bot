@@ -216,12 +216,19 @@ class FireworksPoeStabilityImageBot(PoeBot):
                 # Create session and post data
                 async with aiohttp.ClientSession() as session:
                     async with session.post(self.stability_url, headers=headers, data=form_data) as response:
-                        if not response.ok:
+                        if response.status not in {200, 403}:
                             raise Exception(f"Generation failed with error {response.status} {response.reason} {await response.read()}")
 
-                        finish_reason = response.headers.get("finish_reason", "SUCCESS")
-                        image_data = await response.read()
-                        image = Image.open(io.BytesIO(image_data))
+                        if response.status == 403:
+                            finish_reason = "CONTENT_FILTERED"
+                        else:
+                            finish_reason = response.headers.get("finish_reason", "SUCCESS")
+
+                        if finish_reason == "SUCCESS":
+                            image_data = await response.read()
+                            image = Image.open(io.BytesIO(image_data))
+                        else:
+                            image = None
 
                 return image, finish_reason
 
@@ -241,7 +248,9 @@ class FireworksPoeStabilityImageBot(PoeBot):
             start_t_encode = time.time()
 
             if finish_reason == "CONTENT_FILTERED":
-                yield self.text_event(text="Potentially sensitive content detected")
+                yield self.replace_response_event(text="Potentially sensitive content detected")
+                yield ServerSentEvent(event="done")
+                return
 
             public_image_url = self._upload_image_to_gcs(
                 image, self.gcs_bucket_name
@@ -363,7 +372,9 @@ class FireworksPoeStabilityImageBot(PoeBot):
 
     async def get_settings(self, setting: SettingsRequest) -> SettingsResponse:
         """Override this to return non-standard settings."""
-        return SettingsResponse()
+        return SettingsResponse(
+            enable_multi_bot_chat_prompting=True,
+        )
 
     async def on_feedback(self, feedback_request: ReportFeedbackRequest) -> None:
         """Override this to record feedback from the user."""
