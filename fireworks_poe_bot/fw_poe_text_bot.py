@@ -31,10 +31,11 @@ import traceback
 
 
 class TextModelConfig(ModelConfig):
-    allow_attachments: Optional[bool] = False
     input_image_size: Optional[int] = None
     prompt_truncate_len: int = 2048
     max_tokens: int = 4096
+    ignore_prompt_too_long_error: bool = False
+    enable_image_comprehension: bool = True
     system_prompt_override: Optional[str] = None
     additional_args: Optional[Dict[str, int | str | float | List[str]]] = None
     # "alpaca" or None
@@ -54,10 +55,11 @@ class FireworksPoeTextBot(PoeBot):
         environment: str,
         deployment: str,
         server_version: str,
-        allow_attachments: bool,
         input_image_size: int,
         prompt_truncate_len: int,
         max_tokens: int,
+        ignore_prompt_too_long_error: bool,
+        enable_image_comprehension: bool,
         system_prompt_override: Optional[str],
         additional_args: Optional[Dict[str, int | str]],
         chat_format: Optional[str],
@@ -74,9 +76,10 @@ class FireworksPoeTextBot(PoeBot):
         self.server_version = server_version
         self.input_image_size = input_image_size
         self.completion_async_method = completion_async_method
-        self.allow_attachments = allow_attachments
         self.prompt_truncate_len = prompt_truncate_len
         self.max_tokens = max_tokens
+        self.ignore_prompt_too_long_error = ignore_prompt_too_long_error
+        self.enable_image_comprehension = enable_image_comprehension
         self.chat_format = chat_format
         self.alpaca_instruction_msg = alpaca_instruction_msg
         self.vlm_input_image_safety_check = vlm_input_image_safety_check
@@ -474,7 +477,11 @@ class FireworksPoeTextBot(PoeBot):
             return
         except Exception as e:
             end_t = time.time()
-            self._log_error(
+            log_fn = self._log_error
+            if self.ignore_prompt_too_long_error and "The prompt is too long" in str(e):
+                log_fn = self._log_warn
+
+            log_fn(
                 {
                     "msg": "Invalid request",
                     "error": "\n".join(traceback.format_exception(e)),
@@ -492,7 +499,7 @@ class FireworksPoeTextBot(PoeBot):
             fireworks.client.api_key = orig_api_key
 
     async def get_settings(self, setting: SettingsRequest) -> SettingsResponse:
-        return SettingsResponse(allow_attachments=self.allow_attachments)
+        return SettingsResponse(allow_attachments=True, enable_multi_bot_chat_prompting=True, enable_image_comprehension=self.enable_image_comprehension)
 
     async def on_feedback(self, feedback_request: ReportFeedbackRequest) -> None:
         self._log_info(feedback_request.dict())

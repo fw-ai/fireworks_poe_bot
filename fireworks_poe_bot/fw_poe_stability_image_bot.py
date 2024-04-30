@@ -197,6 +197,8 @@ class FireworksPoeStabilityImageBot(PoeBot):
 
             assert messages[-1]["role"] == "user"
             prompt = messages[-1]["content"]
+            if prompt == "":
+                raise ValueError("No user prompt provided")
 
             headers = {
                 "Authorization": f"Bearer {self.stability_api_key}",
