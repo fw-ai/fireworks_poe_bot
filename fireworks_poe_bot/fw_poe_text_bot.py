@@ -220,7 +220,9 @@ class FireworksPoeTextBot(PoeBot):
                     role = "assistant"
                 else:
                     role = protocol_message.role
-                    if protocol_message.attachments and protocol_message.attachments[
+                    # NB: using `input_image_size` as a flag to determine whether the
+                    # model supports image understanding natively
+                    if self.input_image_size is not None and protocol_message.attachments and protocol_message.attachments[
                         0
                     ].content_type in ["image/png", "image/jpeg"]:
                         try:
