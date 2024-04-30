@@ -34,8 +34,8 @@ class TextModelConfig(ModelConfig):
     input_image_size: Optional[int] = None
     prompt_truncate_len: int = 2048
     max_tokens: int = 4096
-    ignore_prompt_too_long_error: bool = False,
-    enable_image_comprehension: bool = True,
+    ignore_prompt_too_long_error: bool = False
+    enable_image_comprehension: bool = True
     system_prompt_override: Optional[str] = None
     additional_args: Optional[Dict[str, int | str | float | List[str]]] = None
     # "alpaca" or None
