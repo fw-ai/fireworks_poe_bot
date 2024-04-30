@@ -320,7 +320,7 @@ class FireworksPoeVideoBot(PoeBot):
 
     async def get_settings(self, setting: SettingsRequest) -> SettingsResponse:
         """Override this to return non-standard settings."""
-        return SettingsResponse(allow_attachments=True, introduction_message=INTRODUCTION_MESSAGE)
+        return SettingsResponse(allow_attachments=True, introduction_message=INTRODUCTION_MESSAGE, enable_multi_bot_chat_prompting=True)
 
     async def on_feedback(self, feedback_request: ReportFeedbackRequest) -> None:
         """Override this to record feedback from the user."""

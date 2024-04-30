@@ -377,7 +377,7 @@ class FireworksPoeImageBot(PoeBot):
 
     async def get_settings(self, setting: SettingsRequest) -> SettingsResponse:
         """Override this to return non-standard settings."""
-        return SettingsResponse()
+        return SettingsResponse(enable_multi_bot_chat_prompting=True)
 
     async def on_feedback(self, feedback_request: ReportFeedbackRequest) -> None:
         """Override this to record feedback from the user."""
