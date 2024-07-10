@@ -230,7 +230,11 @@ class FireworksPoeTextBot(PoeBot):
                                 protocol_message.attachments[0].url
                             )
                         except Exception as e:
-                            yield ErrorResponse(allow_retry=False, text=str(e))
+                            yield ErrorResponse(
+                                allow_retry=False,
+                                raw_response=e,
+                                text="The bot encountered an error while processing an attached image."
+                            )
                             raise RuntimeError(str(e))
 
                 if img_buffer:
@@ -238,7 +242,7 @@ class FireworksPoeTextBot(PoeBot):
                     if cumulative_image_size_mb > 8:
                         # Apigee has a limit of 10MB for payload, we set image total limit to 8MB
                         yield ErrorResponse(
-                            allow_retry=False, text="The total image size is too big"
+                            allow_retry=False, text="The total image size is too big. Limit is 8MB."
                         )
                         raise RuntimeError("The total image size is too big")
                     messages.append(
@@ -306,8 +310,8 @@ class FireworksPoeTextBot(PoeBot):
                                 )
                                 yield ErrorResponse(
                                     allow_retry=False,
-                                    text="Error performing image safety check: "
-                                    + str(e),
+                                    text="Error performing image safety check.",
+                                    raw_response=e,
                                 )
                                 return
                             last_image_kept = True
@@ -493,9 +497,20 @@ class FireworksPoeTextBot(PoeBot):
             )
             if "prompt is too long" in str(e):
                 error_type = "user_message_too_long"
+                yield ErrorResponse(
+                    allow_retry=False,
+                    error_type=error_type,
+                    raw_response=e,
+                    text="The user message is too long. Please try again with a shorter message."
+                )
             else:
                 error_type = None
-            yield ErrorResponse(allow_retry=False, error_type=error_type, text=str(e))
+                yield ErrorResponse(
+                    allow_retry=False,
+                    error_type=error_type,
+                    raw_response=e,
+                    text="The bot encountered an unexpected error."
+                )
             return
         finally:
             fireworks.client.api_key = orig_api_key
