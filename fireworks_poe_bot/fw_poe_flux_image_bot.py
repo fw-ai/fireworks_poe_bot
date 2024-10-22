@@ -31,8 +31,8 @@ class FluxImageModelConfig:
     multi_turn: bool = False
     meta_response: Optional[MetaResponse] = None
 
-@register_bot_plugin("image_models", FluxImageModelConfig)
-class FireworksPoeImageBot(PoeBot):
+@register_bot_plugin("flux_image_models", FluxImageModelConfig)
+class FireworksPoeFluxImageBot(PoeBot):
     def __init__(
         self,
         model: str,
