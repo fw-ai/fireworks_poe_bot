@@ -240,9 +240,6 @@ class FireworksPoeTextBot(PoeBot):
                                 0
                             ].parsed_content
                 content = []
-
-                if attachment_parsed_content is not None:
-                    content.append({"type": "text", "text": attachment_parsed_content})
                 if img_buffer:
                     num_images += 1
                     if cumulative_image_size_mb > 8:
