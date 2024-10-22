@@ -22,10 +22,11 @@ from PIL import Image
 import uuid
 from google.cloud import storage
 import traceback
-from fireworks_poe_bot.plugin import log_error, log_info, log_warn, register_bot_plugin
+from fireworks_poe_bot.plugin import register_bot_plugin
+from fireworks_poe_bot.config import ModelConfig
 
 
-class FluxImageModelConfig:
+class FluxImageModelConfig(ModelConfig):
     gcs_bucket_name: str
     num_steps: int = 30
     multi_turn: bool = False
