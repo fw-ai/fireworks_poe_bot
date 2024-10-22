@@ -216,6 +216,7 @@ class FireworksPoeTextBot(PoeBot):
                     self._log_warn({"msg": "Unknown content type", **log_msg})
                     continue
                 img_buffer = None
+                attachment_parsed_content = None
                 if protocol_message.role == "bot":
                     role = "assistant"
                 else:
@@ -226,13 +227,21 @@ class FireworksPoeTextBot(PoeBot):
                         0
                     ].content_type in ["image/png", "image/jpeg"]:
                         try:
-                            img_buffer = await self.download_image_and_save_to_bytes(
-                                protocol_message.attachments[0].url
+                            img_buffer = (
+                                await self.download_image_and_save_to_bytes(
+                                    protocol_message.attachments[0].url
+                                )
                             )
                         except Exception as e:
                             yield ErrorResponse(allow_retry=False, text=str(e))
                             raise RuntimeError(str(e))
-
+                    elif protocol_message.attachments[0].parsed_content is not None:
+                        attachment_parsed_content = protocol_message.attachments[
+                            0
+                        ].parsed_content
+                content = []
+                if attachment_parsed_content is not None:
+                    content.append({"type": "text", "text": attachment_parsed_content})
                 if img_buffer:
                     num_images += 1
                     if cumulative_image_size_mb > 8:
@@ -241,21 +250,21 @@ class FireworksPoeTextBot(PoeBot):
                             allow_retry=False, text="The total image size is too big"
                         )
                         raise RuntimeError("The total image size is too big")
-                    messages.append(
-                        {
-                            "role": role,
-                            "content": [
-                                {"type": "text", "text": protocol_message.content},
-                                {
-                                    "type": "image_url",
-                                    "image_url": {"url": img_buffer},
-                                },
-                            ],
-                        }
+                    content.extend(
+                        [
+                            {"type": "text", "text": protocol_message.content},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": img_buffer},
+                            },
+                        ],
                     )
                     cumulative_image_size_mb += len(img_buffer) / 1024 / 1024
                 else:
-                    messages.append({"role": role, "content": protocol_message.content})
+                    content.append(
+                        {"type": "text", "text": protocol_message.content},
+                    )
+                messages.append({"role": role, "content": content})
 
             if num_images >= 1:
                 # We want to remove all the images except the last one
@@ -316,7 +325,10 @@ class FireworksPoeTextBot(PoeBot):
                 if len(messages) == 0 or messages[0]["role"] != "system":
                     system_prompt_msg = {
                         "role": "system",
-                        "content": {"type": "text", "text": self.system_prompt_override},
+                        "content": {
+                            "type": "text",
+                            "text": self.system_prompt_override,
+                        },
                     }
                     messages.insert(0, system_prompt_msg)
 
@@ -348,8 +360,16 @@ class FireworksPoeTextBot(PoeBot):
                         user_message["role"] = "input"
                         # HACKS: move the image to the instruction message
                         if isinstance(user_message["content"], list):
-                            content_non_image = [x for x in  user_message['content'] if (not isinstance(x, dict)) or x["type"] != "image_url"]
-                            content_image = [x for x in user_message['content'] if isinstance(x, dict) and x["type"] == "image_url"]
+                            content_non_image = [
+                                x
+                                for x in user_message["content"]
+                                if (not isinstance(x, dict)) or x["type"] != "image_url"
+                            ]
+                            content_image = [
+                                x
+                                for x in user_message["content"]
+                                if isinstance(x, dict) and x["type"] == "image_url"
+                            ]
                             if content_image:
                                 new_messages[-1]["content"].append(content_image[0])
                             user_message["content"] = content_non_image
@@ -402,19 +422,26 @@ class FireworksPoeTextBot(PoeBot):
                     return " ".join(text)
 
                 for role, group in groupby(messages, key=lambda x: x["role"]):
-                    content = merge_messages_groups([message["content"] for message in group])
+                    content = merge_messages_groups(
+                        [message["content"] for message in group]
+                    )
                     merged_messages.append({"role": role, "content": content})
 
                 messages = merged_messages
 
                 # Ensure last message is a user message
                 if messages[-1]["role"] != "user":
-                    self._log_warn({"msg": f"Last message {messages[-1]} not a user message"})
+                    self._log_warn(
+                        {"msg": f"Last message {messages[-1]} not a user message"}
+                    )
                     messages.append({"role": "user", "content": ""})
 
                 # Ensure that all user messages before the last are followed by an assistant message
                 for i in range(len(messages) - 1):
-                    if messages[i]["role"] == "user" and messages[i + 1]["role"] != "assistant":
+                    if (
+                        messages[i]["role"] == "user"
+                        and messages[i + 1]["role"] != "assistant"
+                    ):
                         self._log_warn(
                             {
                                 "msg": f"User message {messages[i]} not followed by assistant message"
@@ -501,7 +528,11 @@ class FireworksPoeTextBot(PoeBot):
             fireworks.client.api_key = orig_api_key
 
     async def get_settings(self, setting: SettingsRequest) -> SettingsResponse:
-        return SettingsResponse(allow_attachments=True, enable_multi_bot_chat_prompting=True, enable_image_comprehension=self.enable_image_comprehension)
+        return SettingsResponse(
+            allow_attachments=True,
+            enable_multi_bot_chat_prompting=True,
+            enable_image_comprehension=self.enable_image_comprehension,
+        )
 
     async def on_feedback(self, feedback_request: ReportFeedbackRequest) -> None:
         self._log_info(feedback_request.dict())
