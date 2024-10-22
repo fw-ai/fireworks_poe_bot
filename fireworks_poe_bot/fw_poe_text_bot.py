@@ -221,25 +221,27 @@ class FireworksPoeTextBot(PoeBot):
                     role = "assistant"
                 else:
                     role = protocol_message.role
-                    if protocol_message.attachments:
-                        if protocol_message.attachments[0].content_type in [
-                            "image/png",
-                            "image/jpeg",
-                        ]:
-                            try:
-                                img_buffer = (
-                                    await self.download_image_and_save_to_bytes(
-                                        protocol_message.attachments[0].url
-                                    )
+                    # NB: using `input_image_size` as a flag to determine whether the
+                    # model supports image understanding natively
+                    if self.input_image_size is not None and protocol_message.attachments and protocol_message.attachments[
+                        0
+                    ].content_type in ["image/png", "image/jpeg"]:
+                        try:
+                            img_buffer = (
+                                await self.download_image_and_save_to_bytes(
+                                    protocol_message.attachments[0].url
                                 )
-                            except Exception as e:
-                                yield ErrorResponse(allow_retry=False, text=str(e))
-                                raise RuntimeError(str(e))
-                        elif protocol_message.attachments[0].parsed_content is not None:
-                            attachment_parsed_content = protocol_message.attachments[
-                                0
-                            ].parsed_content
+                            )
+                        except Exception as e:
+                            yield ErrorResponse(allow_retry=False, text=str(e))
+                            raise RuntimeError(str(e))
+                    elif protocol_message.attachments[0].parsed_content is not None:
+                        attachment_parsed_content = protocol_message.attachments[
+                            0
+                        ].parsed_content
                 content = []
+                if attachment_parsed_content is not None:
+                    content.append({"type": "text", "text": attachment_parsed_content})
                 if img_buffer:
                     num_images += 1
                     if cumulative_image_size_mb > 8:
