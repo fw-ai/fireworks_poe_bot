@@ -140,7 +140,7 @@ class FireworksPoeFluxImageBot(PoeBot):
 
             elapsed_sec = time.time() - start_t
             await self._log("INFO", {"msg": "Request completed", "response": response_text, "elapsed_sec": elapsed_sec})
-            yield PartialResponse(text=response_text)
+            yield self.replace_response_event(text=response_text)
             yield ServerSentEvent(event="done")
             return
 
