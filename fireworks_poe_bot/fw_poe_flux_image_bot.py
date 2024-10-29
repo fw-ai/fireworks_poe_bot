@@ -1,4 +1,4 @@
-import base64
+import asyncio
 import copy
 import io
 from typing import AsyncIterable, Dict, List, Optional, Union
@@ -111,7 +111,6 @@ class FireworksPoeFluxImageBot(PoeBot):
 
                 messages.append({"role": role, "content": protocol_message.content})
 
-            # Ensure the message format for chat API
             messages = self._normalize_messages(messages)
 
             log_query = copy.copy(query.dict())
@@ -120,7 +119,17 @@ class FireworksPoeFluxImageBot(PoeBot):
             prompt = messages[-1]["content"]
 
             # Call the async image generation function
-            answer = await self._generate_image_async(prompt)
+            inference_task = asyncio.create_task(self._generate_image_async(prompt))
+
+            inference_task_timer = 0
+            while not inference_task.done():
+                yield self.replace_response_event(
+                    text=f"Generating image... ({inference_task_timer} seconds)"
+                )
+                await asyncio.sleep(1)
+                inference_task_timer += 1
+
+            answer = await inference_task
 
             if answer is None:
                 yield ErrorResponse(allow_retry=False, text="Image generation failed")
@@ -136,8 +145,16 @@ class FireworksPoeFluxImageBot(PoeBot):
             return
 
         except Exception as e:
-            await self._log("ERROR", {"msg": "Invalid request", "error": traceback.format_exc()})
-            yield ErrorResponse(allow_retry=False, text=str(e))
+            end_t = time.time()
+            await self._log("ERROR", {
+                "msg": "Invalid request",
+                "error": "\n".join(traceback.format_exception(e)),
+                "elapsed_sec": end_t - start_t,
+                **log_query,
+            })
+            error_type = "user_message_too_long" if "prompt is too long" in str(e) else None
+            yield ErrorResponse(allow_retry=False, error_type=error_type, text=str(e))
+            return
 
     def _normalize_messages(self, messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
         # Ensure assistant messages are preceded by user messages and merge adjacent messages
