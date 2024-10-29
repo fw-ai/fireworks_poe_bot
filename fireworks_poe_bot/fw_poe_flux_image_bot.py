@@ -182,7 +182,6 @@ class FireworksPoeFluxImageBot(PoeBot):
             }
             json_data = {
                 "prompt": prompt,
-                "guidance_scale": 7,
                 "steps": self.num_steps,
                 "seed": 0,
             }
