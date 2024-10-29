@@ -156,7 +156,7 @@ class FireworksPoeFluxImageBot(PoeBot):
         return merged_messages
 
     async def _generate_image_async(self, prompt: str) -> Optional[Image.Image]:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=None) as client:  # Set timeout to None
             url = f"https://api.fireworks.ai/inference/v1/workflows/accounts/{self.account}/models/{self.model}/text_to_image"
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
