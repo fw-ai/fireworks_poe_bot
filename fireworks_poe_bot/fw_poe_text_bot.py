@@ -235,7 +235,7 @@ class FireworksPoeTextBot(PoeBot):
                         except Exception as e:
                             yield ErrorResponse(allow_retry=False, text=str(e))
                             raise RuntimeError(str(e))
-                    elif protocol_message.attachments[0].parsed_content is not None:
+                    elif protocol_message.attachments and protocol_message.attachments[0].parsed_content is not None:
                         attachment_parsed_content = protocol_message.attachments[
                             0
                         ].parsed_content
