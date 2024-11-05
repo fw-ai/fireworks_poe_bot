@@ -22,7 +22,7 @@ from PIL import Image
 import uuid
 from google.cloud import storage
 import traceback
-from fireworks_poe_bot.plugin import register_bot_plugin
+from fireworks_poe_bot.plugin import register_bot_plugin, log_error, log_info, log_warn
 from fireworks_poe_bot.config import ModelConfig
 
 
@@ -31,6 +31,19 @@ class FluxImageModelConfig(ModelConfig):
     num_steps: int = 30
     multi_turn: bool = False
     meta_response: Optional[MetaResponse] = None
+
+
+VALID_ASPECT_RATIOS = [
+    "1:1",
+    "21:9",
+    "16:9",
+    "3:2",
+    "5:4",
+    "4:5",
+    "2:3",
+    "9:16",
+    "9:21",
+]
 
 @register_bot_plugin("flux_image_models", FluxImageModelConfig)
 class FireworksPoeFluxImageBot(PoeBot):
@@ -72,18 +85,44 @@ class FireworksPoeFluxImageBot(PoeBot):
         self.multi_turn = multi_turn
         self.meta_response = MetaResponse(**meta_response) if meta_response else meta_response
 
-    async def _log(self, severity: str, payload: Dict):
+    def _log_warn(self, payload: Dict):
         payload = copy.copy(payload)
         payload.update(
             {
-                "severity": severity,
+                "severity": "WARNING",
                 "environment": self.environment,
                 "deployment": self.deployment,
                 "model": self.model,
                 "server_version": self.server_version,
             }
         )
-        print(payload)  # Replace this with proper logging
+        log_warn(payload)
+
+    def _log_info(self, payload: Dict):
+        payload = copy.copy(payload)
+        payload.update(
+            {
+                "severity": "INFO",
+                "environment": self.environment,
+                "deployment": self.deployment,
+                "model": self.model,
+                "server_version": self.server_version,
+            }
+        )
+        log_info(payload)
+
+    def _log_error(self, payload: Dict):
+        payload = copy.copy(payload)
+        payload.update(
+            {
+                "severity": "ERROR",
+                "environment": self.environment,
+                "deployment": self.deployment,
+                "model": self.model,
+                "server_version": self.server_version,
+            }
+        )
+        log_error(payload)
 
     async def get_response(
         self, query: QueryRequest
@@ -103,10 +142,10 @@ class FireworksPoeFluxImageBot(PoeBot):
             for protocol_message in query.query:
                 role = "assistant" if protocol_message.role == "bot" else protocol_message.role
                 if role not in {"system", "user", "assistant"}:
-                    await self._log("WARNING", {"msg": "Unknown role", **protocol_message})
+                    self._log_warn({"msg": "Unknown role", **protocol_message})
                     continue
                 if protocol_message.content_type not in {"text/plain", "text/markdown"}:
-                    await self._log("WARNING", {"msg": "Unknown content type", **protocol_message})
+                    self._log_warn({"msg": "Unknown content type", **protocol_message})
                     continue
 
                 messages.append({"role": role, "content": protocol_message.content})
@@ -114,12 +153,23 @@ class FireworksPoeFluxImageBot(PoeBot):
             messages = self._normalize_messages(messages)
 
             log_query = copy.copy(query.dict())
-            await self._log("INFO", {"msg": "Request received", **log_query, "processed_msgs": messages})
+            self._log_info({"msg": "Request received", **log_query, "processed_msgs": messages})
 
             prompt = messages[-1]["content"]
+            prompt, *ar = prompt.split("--aspect", maxsplit=1)
+            if len(ar):
+                ar_str = ar[0].strip()
+                if ar_str not in VALID_ASPECT_RATIOS:
+                    yield self.replace_response_event(text=f"ERROR Invalid --aspect {ar_str}")
+                    yield ServerSentEvent(event="done")
+                    return
+            else:
+                ar_str = None
+
+
 
             # Call the async image generation function
-            inference_task = asyncio.create_task(self._generate_image_async(prompt))
+            inference_task = asyncio.create_task(self._generate_image_async(prompt, ar_str))
 
             inference_task_timer = 0
             while not inference_task.done():
@@ -139,14 +189,14 @@ class FireworksPoeFluxImageBot(PoeBot):
             response_text = f"![image]({public_image_url})"
 
             elapsed_sec = time.time() - start_t
-            await self._log("INFO", {"msg": "Request completed", "response": response_text, "elapsed_sec": elapsed_sec})
+            self._log_info({"msg": "Request completed", "response": response_text, "elapsed_sec": elapsed_sec})
             yield self.replace_response_event(text=response_text)
             yield ServerSentEvent(event="done")
             return
 
         except Exception as e:
             end_t = time.time()
-            await self._log("ERROR", {
+            self._log_error({
                 "msg": "Invalid request",
                 "error": "\n".join(traceback.format_exception(e)),
                 "elapsed_sec": end_t - start_t,
@@ -172,7 +222,7 @@ class FireworksPoeFluxImageBot(PoeBot):
 
         return merged_messages
 
-    async def _generate_image_async(self, prompt: str) -> Optional[Image.Image]:
+    async def _generate_image_async(self, prompt: str, aspect_ratio: Optional[str]) -> Optional[Image.Image]:
         async with httpx.AsyncClient(timeout=None) as client:  # Set timeout to None
             url = f"https://api.fireworks.ai/inference/v1/workflows/accounts/{self.account}/models/{self.model}/text_to_image"
             headers = {
@@ -186,6 +236,9 @@ class FireworksPoeFluxImageBot(PoeBot):
                 "seed": 0,
             }
 
+            if aspect_ratio is not None:
+                json_data["aspect_ratio"] = aspect_ratio
+
             try:
                 response = await client.post(url, headers=headers, json=json_data)
                 response.raise_for_status()
@@ -195,7 +248,7 @@ class FireworksPoeFluxImageBot(PoeBot):
                 return Image.open(image_bytes)
 
             except httpx.HTTPStatusError as e:
-                await self._log("ERROR", {"msg": "Image generation failed", "error": str(e)})
+                self._log_error({"msg": "Image generation failed", "error": str(e)})
                 return None
 
     def _upload_image_to_gcs(self, image: Image, bucket_name: str) -> str:
@@ -223,4 +276,4 @@ class FireworksPoeFluxImageBot(PoeBot):
         pass
 
     async def on_error(self, error_request: ReportErrorRequest) -> None:
-        await self._log("ERROR", {"msg": "Error reported", **error_request.dict()})
+        self._log_error({"msg": "Error reported", **error_request.dict()})
