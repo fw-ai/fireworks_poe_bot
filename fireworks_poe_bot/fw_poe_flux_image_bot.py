@@ -24,6 +24,7 @@ from google.cloud import storage
 import traceback
 from fireworks_poe_bot.plugin import register_bot_plugin, log_error, log_info, log_warn
 from fireworks_poe_bot.config import ModelConfig
+import random
 
 
 class FluxImageModelConfig(ModelConfig):
@@ -235,7 +236,7 @@ class FireworksPoeFluxImageBot(PoeBot):
             json_data = {
                 "prompt": prompt,
                 "steps": self.num_steps,
-                "seed": 0,
+                "seed": random.randint(0, 2**32 - 1),  # Generate a random seed
             }
 
             if aspect_ratio is not None:
