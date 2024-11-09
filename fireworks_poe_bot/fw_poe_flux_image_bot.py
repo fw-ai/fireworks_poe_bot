@@ -43,6 +43,8 @@ VALID_ASPECT_RATIOS = [
     "2:3",
     "9:16",
     "9:21",
+    "4:3",
+    "3:4",
 ]
 
 @register_bot_plugin("flux_image_models", FluxImageModelConfig)
