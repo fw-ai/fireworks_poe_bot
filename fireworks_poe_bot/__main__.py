@@ -125,9 +125,9 @@ def main(args=None):
             super().__init__()
             self.bots = bots
 
-        def find_bot(self, account: str, model: str) -> fastapi_poe.PoeBot:
-            model_fqn = f"accounts/{account}/models/{model}"
-            agent_fqn = f"accounts/{account}/agents/{model}"
+        def find_bot(self, account: str, model_or_agent: str) -> fastapi_poe.PoeBot:
+            model_fqn = f"accounts/{account}/models/{model_or_agent}"
+            agent_fqn = f"accounts/{account}/agents/{model_or_agent}"
             bot = self.bots.get(model_fqn) or self.bots.get(agent_fqn)
             if bot is None:
                 raise HTTPException(status_code=404, detail=f"Model {model_fqn} or agent {agent_fqn} not found")
@@ -136,9 +136,10 @@ def main(args=None):
         def find_bot_from_query_params(self, params) -> fastapi_poe.PoeBot:
             if "account" not in params:
                 raise HTTPException(status_code=400, detail=f"Missing account query parameter")
-            if "model" not in params:
-                raise HTTPException(status_code=400, detail=f"Missing model query parameter")
-            return self.find_bot(params["account"], params["model"])
+            model_or_agent = params.get("model") or params.get("agent")
+            if model_or_agent is None:
+                raise HTTPException(status_code=400, detail=f"Missing model or agent query parameter")
+            return self.find_bot(params["account"], model_or_agent)
 
         async def get_response_with_context(
             self, request: fastapi_poe.QueryRequest, context: fastapi_poe.RequestContext
