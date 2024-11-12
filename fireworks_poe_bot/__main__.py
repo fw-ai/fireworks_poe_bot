@@ -126,10 +126,12 @@ def main(args=None):
             self.bots = bots
 
         def find_bot(self, account: str, model: str) -> fastapi_poe.PoeBot:
-            bot_fqn = f"accounts/{account}/models/{model}"
-            if bot_fqn not in self.bots:
-                raise HTTPException(status_code=404, detail=f"Bot {bot_fqn} not found")
-            return bots[bot_fqn]
+            model_fqn = f"accounts/{account}/models/{model}"
+            agent_fqn = f"accounts/{account}/agents/{model}"
+            bot = self.bots.get(model_fqn) or self.bots.get(agent_fqn)
+            if bot is None:
+                raise HTTPException(status_code=404, detail=f"Model {model_fqn} or agent {agent_fqn} not found")
+            return bot
 
         def find_bot_from_query_params(self, params) -> fastapi_poe.PoeBot:
             if "account" not in params:
