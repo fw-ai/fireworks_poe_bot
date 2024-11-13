@@ -7,7 +7,6 @@ This codebase is the underlying implementation of the [Mistral-7B](https://poe.c
 
 The server has several important arguments:
 
-* `--model` - This flag specifies the model to call into on Fireworks. For example: `accounts/fireworks/models/mistral-7b-instruct-4k`
 * `FIREWORKS_API_KEY` - This environment variable specifies the API key to use to call into Fireworks. API keys can be retrieved from the [Fireworks console](https://app.fireworks.ai/users?tab=apps).
 
 There are several optional arguments that can usually be left as default:
@@ -16,6 +15,7 @@ There are several optional arguments that can usually be left as default:
 * `--port` specifies the port for the bot to listen on. By default this is port 80.
 * `FIREWORKS_API_BASE` environment variable specifies the base URL to call into Fireworks. This is `https://api.fireworks.ai` by default. You usually don't need to modify this.
 
+You can read more from `fireworks_poe_bot/__main__.py` for more details on arguments.
 
 ## Running the bot
 
@@ -23,7 +23,8 @@ The bot can be run locally by installing the package and running the module:
 
 ```bash
 $ pip install -e .
-$ FIREWORKS_API_KEY=<your API key> python -m fireworks_poe_bot --model accounts/fireworks/models/mistral-7b-ins
+# Ensure that you have the config.json containing bot configurations ready to use.
+$ FIREWORKS_API_KEY=<your API key> python -m fireworks_poe_bot
 truct-4k
 INFO:     Started server process [50060]
 INFO:     Waiting for application startup.
