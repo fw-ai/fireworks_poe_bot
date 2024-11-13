@@ -268,7 +268,6 @@ class FireworksPoeFluxImageBot(PoeBot):
 
         blob = bucket.blob(filename)
         blob.upload_from_string(img_byte_arr, content_type="image/jpeg")
-        blob.make_public()
 
         return blob.public_url
 
