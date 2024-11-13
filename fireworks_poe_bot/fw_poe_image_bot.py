@@ -351,8 +351,6 @@ class FireworksPoeImageBot(PoeBot):
         blob = bucket.blob(filename)
         blob.upload_from_string(img_byte_arr, content_type=f"image/jpeg")
 
-        blob.make_public()
-
         # The public URL can be accessed with the `public_url` attribute
         public_url = blob.public_url
 
