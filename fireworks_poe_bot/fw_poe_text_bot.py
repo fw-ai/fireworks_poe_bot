@@ -34,6 +34,7 @@ class TextModelConfig(ModelConfig):
     input_image_size: Optional[int] = None
     prompt_truncate_len: int = 2048
     max_tokens: int = 4096
+    request_timeout: int = 1000
     ignore_prompt_too_long_error: bool = False
     enable_image_comprehension: bool = True
     system_prompt_override: Optional[str] = None
@@ -58,6 +59,7 @@ class FireworksPoeTextBot(PoeBot):
         input_image_size: int,
         prompt_truncate_len: int,
         max_tokens: int,
+        request_timeout: int,
         ignore_prompt_too_long_error: bool,
         enable_image_comprehension: bool,
         system_prompt_override: Optional[str],
@@ -78,6 +80,7 @@ class FireworksPoeTextBot(PoeBot):
         self.completion_async_method = completion_async_method
         self.prompt_truncate_len = prompt_truncate_len
         self.max_tokens = max_tokens
+        self.request_timeout = request_timeout
         self.ignore_prompt_too_long_error = ignore_prompt_too_long_error
         self.enable_image_comprehension = enable_image_comprehension
         self.chat_format = chat_format
@@ -470,7 +473,7 @@ class FireworksPoeTextBot(PoeBot):
                 model=self.model,
                 messages=messages,
                 stream=True,
-                request_timeout=600,
+                request_timeout=self.request_timeout or 600,
                 temperature=query.temperature,
                 stop=stop_seqs,
                 max_tokens=self.max_tokens,
