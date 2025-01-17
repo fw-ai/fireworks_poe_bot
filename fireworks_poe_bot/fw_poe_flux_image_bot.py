@@ -210,20 +210,15 @@ class FireworksPoeFluxImageBot(PoeBot):
             return
 
     def _normalize_messages(self, messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
-        # Ensure assistant messages are preceded by user messages and merge adjacent messages
+        # Ensure assistant messages are preceded by user messages
         for i in range(len(messages) - 1, -1, -1):
             if messages[i]["role"] == "assistant" and (i == 0 or messages[i - 1]["role"] != "user"):
                 messages.insert(i, {"role": "user", "content": ""})
 
-        merged_messages = []
-        for role, group in groupby(messages, key=lambda x: x["role"]):
-            content = " ".join(message["content"] for message in group)
-            merged_messages.append({"role": role, "content": content})
+        if messages[-1]["role"] != "user":
+            messages.append({"role": "user", "content": ""})
 
-        if merged_messages[-1]["role"] != "user":
-            merged_messages.append({"role": "user", "content": ""})
-
-        return merged_messages
+        return messages
 
     async def _generate_image_async(self, prompt: str, aspect_ratio: Optional[str]) -> Optional[Image.Image]:
         async with httpx.AsyncClient(timeout=None) as client:  # Set timeout to None
