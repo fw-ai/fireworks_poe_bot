@@ -169,15 +169,6 @@ class FireworksPoeStabilityImageBot(PoeBot):
                     )
                     messages.insert(i, {"role": "user", "content": ""})
 
-            # Merge adjacent messages from the same role
-            merged_messages = []
-
-            for role, group in groupby(messages, key=lambda x: x["role"]):
-                content = " ".join(message["content"] for message in group)
-                merged_messages.append({"role": role, "content": content})
-
-            messages = merged_messages
-
             # Ensure last message is a user message
             if messages[-1]["role"] != "user":
                 self._log_warn({"msg": f"Last message {messages[-1]} not a user message"})
