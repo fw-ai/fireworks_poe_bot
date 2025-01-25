@@ -27,6 +27,7 @@ import json
 class ServerArgs:
     host: str = "0.0.0.0"
     port: int = 80
+    timeout_keep_alive: int = 200
     config_file_path: str = "config.json"
     environment: str = ""
     deployment: str = "poe-omnibot"
@@ -58,6 +59,11 @@ def main(args=None):
         server_group = parser.add_argument_group("server", "Server arguments")
         server_group.add_argument("--host", type=str, default=server_args.host)
         server_group.add_argument("-p", "--port", type=int, default=server_args.port)
+        server_group.add_argument(
+            "--timeout-keep-alive",
+            type=int,
+            default=int(os.getenv("TIMEOUT_KEEP_ALIVE", server_args.timeout_keep_alive))
+        )
         server_group.add_argument(
             "-c", "--config-file-path", type=str, default=server_args.config_file_path
         )
@@ -178,6 +184,7 @@ def main(args=None):
         app,
         host=args.host,
         port=args.port,
+        timeout_keep_alive=args.timeout_keep_alive,
         log_level="info",
         server_header=False,
         log_config=UVICORN_LOGGING_CONFIG,
