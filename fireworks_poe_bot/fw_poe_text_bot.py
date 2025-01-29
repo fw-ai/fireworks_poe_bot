@@ -43,6 +43,7 @@ class TextModelConfig(ModelConfig):
     chat_format: Optional[str] = None
     alpaca_instruction_msg: Optional[str] = None
     vlm_input_image_safety_check: Optional[bool] = False
+    replace_think: bool = False
 
     meta_response: Optional[MetaResponse] = None
 
@@ -67,6 +68,7 @@ class FireworksPoeTextBot(PoeBot):
         chat_format: Optional[str],
         alpaca_instruction_msg: Optional[str],
         vlm_input_image_safety_check: Optional[bool],
+        replace_think: bool,
         meta_response: Optional[MetaResponse],
         completion_async_method: Callable = ChatCompletion.acreate,
     ):
@@ -86,6 +88,7 @@ class FireworksPoeTextBot(PoeBot):
         self.chat_format = chat_format
         self.alpaca_instruction_msg = alpaca_instruction_msg
         self.vlm_input_image_safety_check = vlm_input_image_safety_check
+        self.replace_think = replace_think
         self.system_prompt_override = system_prompt_override
         self.additional_args = additional_args or {}
         if meta_response:
@@ -485,6 +488,10 @@ class FireworksPoeTextBot(PoeBot):
                     assert isinstance(choice, ChatCompletionResponseStreamChoice)
                     if choice.delta.content is None:
                         continue
+
+                    if self.replace_think:
+                        choice.delta.content.replace('<think>', '```')
+                        choice.delta.content.replace('</think>', '```')
 
                     generated_len += len(choice.delta.content)
                     complete_response += choice.delta.content
