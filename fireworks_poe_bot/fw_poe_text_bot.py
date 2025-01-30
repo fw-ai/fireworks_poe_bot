@@ -490,8 +490,8 @@ class FireworksPoeTextBot(PoeBot):
                         continue
 
                     if self.replace_think:
-                        choice.delta.content.replace('<think>', '```')
-                        choice.delta.content.replace('</think>', '```')
+                        choice.delta.content = choice.delta.content.replace('<think>', '```text')
+                        choice.delta.content = choice.delta.content.replace('</think>', '```')
 
                     generated_len += len(choice.delta.content)
                     complete_response += choice.delta.content
