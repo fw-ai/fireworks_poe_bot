@@ -477,7 +477,7 @@ class FireworksPoeTextBot(PoeBot):
                 messages=messages,
                 stream=True,
                 request_timeout=self.request_timeout or 600,
-                temperature=query.temperature,
+                temperature=query.temperature if query.temperature is not None else 0.6,
                 stop=stop_seqs,
                 max_tokens=self.max_tokens,
                 prompt_truncate_len=self.prompt_truncate_len,
