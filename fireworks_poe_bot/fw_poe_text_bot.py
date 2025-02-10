@@ -472,6 +472,7 @@ class FireworksPoeTextBot(PoeBot):
                 stop_seqs = query.stop_sequences[:4]
             generated_len = 0
             complete_response = ""
+            unreplaced_complete_response = ""
             async for response in self.completion_async_method(
                 model=self.model,
                 messages=messages,
@@ -490,8 +491,16 @@ class FireworksPoeTextBot(PoeBot):
                         continue
 
                     if self.replace_think:
-                        choice.delta.content = choice.delta.content.replace('<think>', '```text')
-                        choice.delta.content = choice.delta.content.replace('</think>', '```')
+                        unreplaced_complete_response += choice.delta.content
+                        thinking_mode = False
+                        if '<think>' in unreplaced_complete_response:
+                            choice.delta.content = choice.delta.content.replace('<think>', 'Thinking...\n')
+                            thinking_mode = True
+                        if '</think>' in unreplaced_complete_response:
+                            choice.delta.content = choice.delta.content.replace('</think>', '\n')
+                            thinking_mode = False
+                        if thinking_mode:
+                            choice.delta.content = choice.delta.content.replace('\n', '\n> ')
 
                     generated_len += len(choice.delta.content)
                     complete_response += choice.delta.content
