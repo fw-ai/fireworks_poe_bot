@@ -494,7 +494,7 @@ class FireworksPoeTextBot(PoeBot):
                         unreplaced_complete_response += choice.delta.content
                         thinking_mode = False
                         if '<think>' in unreplaced_complete_response:
-                            choice.delta.content = choice.delta.content.replace('<think>', '\n> ')
+                            choice.delta.content = choice.delta.content.replace('<think>', 'Thinking...\n')
                             thinking_mode = True
                         if '</think>' in unreplaced_complete_response:
                             choice.delta.content = choice.delta.content.replace('</think>', '\n')
