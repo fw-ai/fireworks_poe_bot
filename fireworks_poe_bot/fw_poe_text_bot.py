@@ -473,42 +473,157 @@ class FireworksPoeTextBot(PoeBot):
             generated_len = 0
             complete_response = ""
             unreplaced_complete_response = ""
-            async for response in self.completion_async_method(
-                model=self.model,
-                messages=messages,
-                stream=True,
-                request_timeout=self.request_timeout or 600,
-                temperature=query.temperature if query.temperature is not None else 0.6,
-                stop=stop_seqs,
-                max_tokens=self.max_tokens,
-                prompt_truncate_len=self.prompt_truncate_len,
-                **additional_args,
-            ):
-                # Step 3: Transform the CompletionStreamResponse into PartialResponse format
-                for choice in response.choices:
-                    assert isinstance(choice, ChatCompletionResponseStreamChoice)
-                    if choice.delta.content is None:
-                        continue
+            
+            # Add timestamps for streaming diagnostics
+            stream_start_time = time.time()
+            first_token_received = False
+            last_token_time = stream_start_time
+            token_count = 0
+            
+            self._log_info({
+                "msg": "Starting stream request to Fireworks API",
+                "request_timeout": self.request_timeout,
+                "stream_start_time": stream_start_time,
+                "temperature": query.temperature if query.temperature is not None else 0.6,
+                "max_tokens": self.max_tokens,
+            })
+            
+            try:
+                async for response in self.completion_async_method(
+                    model=self.model,
+                    messages=messages,
+                    stream=True,
+                    request_timeout=self.request_timeout or 600,
+                    temperature=query.temperature if query.temperature is not None else 0.6,
+                    stop=stop_seqs,
+                    max_tokens=self.max_tokens,
+                    prompt_truncate_len=self.prompt_truncate_len,
+                    **additional_args,
+                ):
+                    # Step 3: Transform the CompletionStreamResponse into PartialResponse format
+                    current_time = time.time()
+                    
+                    # Check for long delays between tokens
+                    if token_count > 0 and current_time - last_token_time > 5.0:
+                        self._log_warn({
+                            "msg": "Long delay between tokens",
+                            "seconds_since_last_token": current_time - last_token_time,
+                            "token_count": token_count,
+                            "request_id": response.id,
+                        })
+                    
+                    for choice in response.choices:
+                        assert isinstance(choice, ChatCompletionResponseStreamChoice)
+                        if choice.delta.content is None:
+                            continue
 
-                    if self.replace_think:
-                        unreplaced_complete_response += choice.delta.content
-                        thinking_mode = False
-                        if '<think>' in unreplaced_complete_response:
-                            choice.delta.content = choice.delta.content.replace('<think>', 'Thinking...\n')
-                            thinking_mode = True
-                        if '</think>' in unreplaced_complete_response:
-                            choice.delta.content = choice.delta.content.replace('</think>', '\n')
+                        token_count += 1
+                        
+                        # Log when first token is received
+                        if not first_token_received:
+                            first_token_received = True
+                            first_token_time = current_time
+                            first_token_latency = first_token_time - stream_start_time
+                            self._log_info({
+                                "msg": "First token received",
+                                "first_token_latency_sec": first_token_latency,
+                                "request_id": response.id,
+                            })
+                            
+                            # Alert if first token took too long
+                            if first_token_latency > 10.0:
+                                self._log_warn({
+                                    "msg": "High latency for first token",
+                                    "first_token_latency_sec": first_token_latency,
+                                    "request_id": response.id,
+                                })
+
+                        if self.replace_think:
+                            unreplaced_complete_response += choice.delta.content
                             thinking_mode = False
-                        if thinking_mode:
-                            choice.delta.content = choice.delta.content.replace('\n', '\n> ')
+                            if '<think>' in unreplaced_complete_response:
+                                choice.delta.content = choice.delta.content.replace('<think>', 'Thinking...\n')
+                                thinking_mode = True
+                            if '</think>' in unreplaced_complete_response:
+                                choice.delta.content = choice.delta.content.replace('</think>', '\n')
+                                thinking_mode = False
+                            if thinking_mode:
+                                choice.delta.content = choice.delta.content.replace('\n', '\n> ')
 
-                    generated_len += len(choice.delta.content)
-                    complete_response += choice.delta.content
-                    yield PartialResponse(
-                        text=choice.delta.content,
-                        raw_response=response,
-                        request_id=response.id,
-                    )
+                        generated_len += len(choice.delta.content)
+                        complete_response += choice.delta.content
+                        
+                        # Update last token time
+                        last_token_time = current_time
+                        
+                        yield PartialResponse(
+                            text=choice.delta.content,
+                            raw_response=response,
+                            request_id=response.id,
+                        )
+                
+                # Log stream performance metrics
+                end_t = time.time()
+                self._log_info({
+                    "msg": "Stream completed successfully",
+                    "token_count": token_count,
+                    "stream_duration_sec": end_t - stream_start_time,
+                    "tokens_per_second": token_count / (end_t - stream_start_time) if end_t > stream_start_time else 0,
+                    "request_id": response.id if 'response' in locals() else None,
+                })
+                
+            except TimeoutError as e:
+                # Special handling for timeout errors
+                timeout_time = time.time()
+                timeout_duration = timeout_time - stream_start_time
+                self._log_error({
+                    "msg": "Fireworks API Timeout Error",
+                    "error_type": "timeout",
+                    "error_details": str(e),
+                    "timeout_duration_sec": timeout_duration,
+                    "first_token_received": first_token_received,
+                    "token_count": token_count,
+                    "request_timeout_setting": self.request_timeout,
+                    "query": copy.copy(query.dict()),
+                })
+                raise
+                
+            except ConnectionError as e:
+                # Special handling for connection errors
+                connection_error_time = time.time()
+                self._log_error({
+                    "msg": "Fireworks API Connection Error",
+                    "error_type": "connection",
+                    "error_details": str(e),
+                    "connection_duration_sec": connection_error_time - stream_start_time,
+                    "first_token_received": first_token_received,
+                    "token_count": token_count,
+                    "partial_response_length": len(complete_response),
+                    "query": copy.copy(query.dict()),
+                })
+                raise
+            except InvalidRequestError as e:
+                # Special handling for invalid request errors
+                end_t = time.time()
+                log_fn = self._log_error
+                if self.ignore_prompt_too_long_error and "The prompt is too long" in str(e):
+                    log_fn = self._log_warn
+                    
+                log_fn({
+                    "msg": "Invalid request to Fireworks API",
+                    "error_type": "invalid_request",
+                    "error_details": str(e),
+                    "elapsed_sec": end_t - start_t,
+                    "first_token_received": first_token_received,
+                    "token_count": token_count,
+                    "query": copy.copy(query.dict()),
+                })
+                if "prompt is too long" in str(e):
+                    error_type = "user_message_too_long"
+                else:
+                    error_type = None
+                yield ErrorResponse(allow_retry=False, error_type=error_type, text=str(e))
+                return
 
             end_t = time.time()
             elapsed_sec = end_t - start_t
@@ -529,20 +644,36 @@ class FireworksPoeTextBot(PoeBot):
             if self.ignore_prompt_too_long_error and "The prompt is too long" in str(e):
                 log_fn = self._log_warn
 
-            log_fn(
-                {
-                    "msg": "Invalid request",
-                    "error": "\n".join(traceback.format_exception(e)),
-                    "elapsed_sec": end_t - start_t,
-                    "query": copy.copy(query.dict()),
-                }
-            )
+            # Enhanced error reporting with exception type
+            error_type = type(e).__name__
+            error_message = str(e)
+            
+            # Check for specific error patterns in error message
+            if "didn't generate first token before the given deadline" in error_message:
+                error_category = "first_token_timeout"
+            elif "closed connection" in error_message:
+                error_category = "connection_closed"
+            elif "request timed out" in error_message.lower():
+                error_category = "request_timeout"
+            else:
+                error_category = "general_error"
+            
+            log_fn({
+                "msg": "Error during request processing",
+                "error_type": error_type,
+                "error_category": error_category,
+                "error_details": error_message,
+                "error_traceback": "\n".join(traceback.format_exception(e)),
+                "elapsed_sec": end_t - start_t,
+                "first_token_received": first_token_received if 'first_token_received' in locals() else False,
+                "token_count": token_count if 'token_count' in locals() else 0,
+                "query": copy.copy(query.dict()),
+            })
             if "prompt is too long" in str(e):
                 error_type = "user_message_too_long"
             else:
                 error_type = None
             yield ErrorResponse(allow_retry=False, error_type=error_type, text=str(e))
-            return
         finally:
             fireworks.client.api_key = orig_api_key
 
