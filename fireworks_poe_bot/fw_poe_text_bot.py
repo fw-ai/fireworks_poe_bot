@@ -649,11 +649,11 @@ class FireworksPoeTextBot(PoeBot):
             error_message = str(e)
             
             # Check for specific error patterns in error message
-            if "didn't generate first token before the given deadline" in error_message:
+            if "generate first token before the given deadline" in error_message:
                 error_category = "first_token_timeout"
             elif "closed connection" in error_message:
                 error_category = "connection_closed"
-            elif "request timed out" in error_message.lower():
+            elif "timed out" in error_message.lower():
                 error_category = "request_timeout"
             else:
                 error_category = "general_error"
@@ -674,6 +674,7 @@ class FireworksPoeTextBot(PoeBot):
             else:
                 error_type = None
             yield ErrorResponse(allow_retry=False, error_type=error_type, text=str(e))
+            return
         finally:
             fireworks.client.api_key = orig_api_key
 
