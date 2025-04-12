@@ -602,30 +602,10 @@ class FireworksPoeTextBot(PoeBot):
                 })
                 
             except (TimeoutError, ConnectionError) as e:
-                # Special handling for network-related errors
-                end_t = time.time()
-                error_type = type(e).__name__.lower().replace("error", "")
+            
+                error_type = type(e).__name__
                 
-                # Build log message
-                log_data = {
-                    "msg": f"Fireworks API {error_type.capitalize()} Error",
-                    "request_id": request_id,
-                    "error_type": error_type,
-                    "error_details": str(e),
-                    "first_token_received": first_token_received,
-                    "token_count": token_count,
-                    "query": copy.copy(query.dict()),
-                }
-                
-                # Add specific fields based on error type
-                if isinstance(e, TimeoutError):
-                    log_data["timeout_duration_sec"] = end_t - stream_start_time
-                    log_data["request_timeout_setting"] = self.request_timeout
-                else:  # ConnectionError
-                    log_data["connection_duration_sec"] = end_t - stream_start_time
-                    log_data["partial_response_length"] = len(complete_response)
-                
-                self._log_error(log_data)
+                self._log_error(error_type)
                 raise
 
             end_t = time.time()
