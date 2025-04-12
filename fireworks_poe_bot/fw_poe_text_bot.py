@@ -601,37 +601,31 @@ class FireworksPoeTextBot(PoeBot):
                     "fireworks_response_id": response.id if 'response' in locals() else None,
                 })
                 
-            except TimeoutError as e:
-                # Special handling for timeout errors
-                timeout_time = time.time()
-                timeout_duration = timeout_time - stream_start_time
-                self._log_error({
-                    "msg": "Fireworks API Timeout Error",
-                    "request_id": request_id,
-                    "error_type": "timeout",
-                    "error_details": str(e),
-                    "timeout_duration_sec": timeout_duration,
-                    "first_token_received": first_token_received,
-                    "token_count": token_count,
-                    "request_timeout_setting": self.request_timeout,
-                    "query": copy.copy(query.dict()),
-                })
-                raise
+            except (TimeoutError, ConnectionError) as e:
+                # Special handling for network-related errors
+                end_t = time.time()
+                error_type = type(e).__name__.lower().replace("error", "")
                 
-            except ConnectionError as e:
-                # Special handling for connection errors
-                connection_error_time = time.time()
-                self._log_error({
-                    "msg": "Fireworks API Connection Error",
+                # Build log message
+                log_data = {
+                    "msg": f"Fireworks API {error_type.capitalize()} Error",
                     "request_id": request_id,
-                    "error_type": "connection",
+                    "error_type": error_type,
                     "error_details": str(e),
-                    "connection_duration_sec": connection_error_time - stream_start_time,
                     "first_token_received": first_token_received,
                     "token_count": token_count,
-                    "partial_response_length": len(complete_response),
                     "query": copy.copy(query.dict()),
-                })
+                }
+                
+                # Add specific fields based on error type
+                if isinstance(e, TimeoutError):
+                    log_data["timeout_duration_sec"] = end_t - stream_start_time
+                    log_data["request_timeout_setting"] = self.request_timeout
+                else:  # ConnectionError
+                    log_data["connection_duration_sec"] = end_t - stream_start_time
+                    log_data["partial_response_length"] = len(complete_response)
+                
+                self._log_error(log_data)
                 raise
 
             end_t = time.time()
