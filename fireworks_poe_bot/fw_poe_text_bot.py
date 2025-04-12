@@ -630,11 +630,13 @@ class FireworksPoeTextBot(PoeBot):
 
             # Enhanced error reporting with exception type
             error_type = type(e).__name__
+            error_code = getattr(e, 'status_code', None)
             error_message = str(e)
             
             log_fn({
                 "msg": "Error during request processing",
                 "request_id": request_id,
+                "error_code": error_code,
                 "error_type": error_type,
                 "error_details": error_message,
                 "error_traceback": "\n".join(traceback.format_exception(e)),
