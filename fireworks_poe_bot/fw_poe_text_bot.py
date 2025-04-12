@@ -205,6 +205,10 @@ class FireworksPoeTextBot(PoeBot):
 
         # Generate a unique request_id to correlate logs and API calls
         request_id = str(uuid.uuid4())
+
+         # Add token metrics for  diagnostics
+        first_token_received = False
+        token_count = 0
         
         orig_api_key = fireworks.client.api_key
         fireworks.client.api_key = self.api_key
@@ -485,9 +489,7 @@ class FireworksPoeTextBot(PoeBot):
             
             # Add timestamps for streaming diagnostics
             stream_start_time = time.time()
-            first_token_received = False
             last_token_time = stream_start_time
-            token_count = 0
             
             self._log_info({
                 "msg": "Starting stream request to Fireworks API",
@@ -641,8 +643,8 @@ class FireworksPoeTextBot(PoeBot):
                 "error_details": error_message,
                 "error_traceback": "\n".join(traceback.format_exception(e)),
                 "elapsed_sec": end_t - start_t,
-                "first_token_received": first_token_received if 'first_token_received' in locals() else False,
-                "token_count": token_count if 'token_count' in locals() else 0,
+                "first_token_received": first_token_received,
+                "token_count": token_count,
                 "query": copy.copy(query.dict()),
             })
             if "prompt is too long" in str(e):
