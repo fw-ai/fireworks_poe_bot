@@ -26,6 +26,7 @@ import time
 import io
 import base64
 import httpx
+import uuid
 from PIL import Image
 import traceback
 
@@ -202,6 +203,9 @@ class FireworksPoeTextBot(PoeBot):
             yield ErrorResponse(allow_retry=False, text="Empty query")
             return
 
+        # Generate a unique request_id to correlate logs and API calls
+        request_id = str(uuid.uuid4())
+        
         orig_api_key = fireworks.client.api_key
         fireworks.client.api_key = self.api_key
         num_images = 0
@@ -216,10 +220,10 @@ class FireworksPoeTextBot(PoeBot):
                 # OpenAI/Fireworks use the "assistant" role for the LLM, but Poe uses the
                 # "bot" role. Replace that one. Otherwise, ignore the role
                 if protocol_message.role not in {"system", "user", "bot"}:
-                    self._log_warn({"msg": "Unknown role", **log_msg})
+                    self._log_warn({"msg": "Unknown role", "request_id": request_id, **log_msg})
                     continue
                 if protocol_message.content_type not in {"text/plain", "text/markdown"}:
-                    self._log_warn({"msg": "Unknown content type", **log_msg})
+                    self._log_warn({"msg": "Unknown content type", "request_id": request_id, **log_msg})
                     continue
                 img_buffer = None
                 attachment_parsed_content = None
@@ -294,6 +298,7 @@ class FireworksPoeTextBot(PoeBot):
                                                 "error": "Image provided contains NSFW content",
                                                 "elapsed_sec": end_t - start_t,
                                                 "query": copy.copy(query.dict()),
+                                                "request_id": request_id,
                                             }
                                         )
                                         yield PartialResponse(
@@ -317,6 +322,7 @@ class FireworksPoeTextBot(PoeBot):
                                         ),
                                         "elapsed_sec": end_t - start_t,
                                         "query": copy.copy(query.dict()),
+                                        "request_id": request_id,
                                     }
                                 )
                                 yield ErrorResponse(
@@ -399,7 +405,8 @@ class FireworksPoeTextBot(PoeBot):
                     ):
                         self._log_warn(
                             {
-                                "msg": f"Assistant message {messages[i]} not preceded by user message"
+                                "msg": f"Assistant message {messages[i]} not preceded by user message",
+                                "request_id": request_id,
                             }
                         )
                         messages.insert(i, {"role": "user", "content": ""})
@@ -438,7 +445,7 @@ class FireworksPoeTextBot(PoeBot):
                 # Ensure last message is a user message
                 if messages[-1]["role"] != "user":
                     self._log_warn(
-                        {"msg": f"Last message {messages[-1]} not a user message"}
+                        {"msg": f"Last message {messages[-1]} not a user message", "request_id": request_id}
                     )
                     messages.append({"role": "user", "content": ""})
 
@@ -450,7 +457,8 @@ class FireworksPoeTextBot(PoeBot):
                     ):
                         self._log_warn(
                             {
-                                "msg": f"User message {messages[i]} not followed by assistant message"
+                                "msg": f"User message {messages[i]} not followed by assistant message",
+                                "request_id": request_id,
                             }
                         )
                         messages.insert(i + 1, {"role": "assistant", "content": ""})
@@ -459,6 +467,7 @@ class FireworksPoeTextBot(PoeBot):
             self._log_info(
                 {
                     "msg": "Request received",
+                    "request_id": request_id,
                     **log_query,
                     "processed_msgs": messages,
                 }
@@ -482,6 +491,7 @@ class FireworksPoeTextBot(PoeBot):
             
             self._log_info({
                 "msg": "Starting stream request to Fireworks API",
+                "request_id": request_id,
                 "request_timeout": self.request_timeout,
                 "stream_start_time": stream_start_time,
                 "temperature": query.temperature if query.temperature is not None else 0.6,
@@ -489,6 +499,21 @@ class FireworksPoeTextBot(PoeBot):
             })
             
             try:
+                # Create headers to pass the request_id to the Fireworks API
+                # Properly merge with existing headers if present
+                if "headers" not in additional_args:
+                    additional_args["headers"] = {}
+                
+                # Add request_id to headers, preserving any existing headers
+                additional_args["headers"]["x-request-id"] = request_id
+                
+                # Log the headers we're sending to help with debugging
+                self._log_info({
+                    "msg": "Sending request to Fireworks API with headers",
+                    "request_id": request_id,
+                    "headers": additional_args["headers"],
+                })
+                
                 async for response in self.completion_async_method(
                     model=self.model,
                     messages=messages,
@@ -507,9 +532,10 @@ class FireworksPoeTextBot(PoeBot):
                     if token_count > 0 and current_time - last_token_time > 5.0:
                         self._log_warn({
                             "msg": "Long delay between tokens",
+                            "request_id": request_id,
                             "seconds_since_last_token": current_time - last_token_time,
                             "token_count": token_count,
-                            "request_id": response.id,
+                            "fireworks_response_id": response.id,
                         })
                     
                     for choice in response.choices:
@@ -526,16 +552,18 @@ class FireworksPoeTextBot(PoeBot):
                             first_token_latency = first_token_time - stream_start_time
                             self._log_info({
                                 "msg": "First token received",
+                                "request_id": request_id,
                                 "first_token_latency_sec": first_token_latency,
-                                "request_id": response.id,
+                                "fireworks_response_id": response.id,
                             })
                             
                             # Alert if first token took too long
                             if first_token_latency > 10.0:
                                 self._log_warn({
                                     "msg": "High latency for first token",
+                                    "request_id": request_id,
                                     "first_token_latency_sec": first_token_latency,
-                                    "request_id": response.id,
+                                    "fireworks_response_id": response.id,
                                 })
 
                         if self.replace_think:
@@ -566,10 +594,11 @@ class FireworksPoeTextBot(PoeBot):
                 end_t = time.time()
                 self._log_info({
                     "msg": "Stream completed successfully",
+                    "request_id": request_id,
                     "token_count": token_count,
                     "stream_duration_sec": end_t - stream_start_time,
                     "tokens_per_second": token_count / (end_t - stream_start_time) if end_t > stream_start_time else 0,
-                    "request_id": response.id if 'response' in locals() else None,
+                    "fireworks_response_id": response.id if 'response' in locals() else None,
                 })
                 
             except TimeoutError as e:
@@ -578,6 +607,7 @@ class FireworksPoeTextBot(PoeBot):
                 timeout_duration = timeout_time - stream_start_time
                 self._log_error({
                     "msg": "Fireworks API Timeout Error",
+                    "request_id": request_id,
                     "error_type": "timeout",
                     "error_details": str(e),
                     "timeout_duration_sec": timeout_duration,
@@ -593,6 +623,7 @@ class FireworksPoeTextBot(PoeBot):
                 connection_error_time = time.time()
                 self._log_error({
                     "msg": "Fireworks API Connection Error",
+                    "request_id": request_id,
                     "error_type": "connection",
                     "error_details": str(e),
                     "connection_duration_sec": connection_error_time - stream_start_time,
@@ -611,6 +642,7 @@ class FireworksPoeTextBot(PoeBot):
                     
                 log_fn({
                     "msg": "Invalid request to Fireworks API",
+                    "request_id": request_id,
                     "error_type": "invalid_request",
                     "error_details": str(e),
                     "elapsed_sec": end_t - start_t,
@@ -630,6 +662,7 @@ class FireworksPoeTextBot(PoeBot):
             self._log_info(
                 {
                     "msg": "Request completed",
+                    "request_id": request_id,
                     "query": log_query,
                     "response": complete_response,
                     "generated_len": generated_len,
@@ -660,6 +693,7 @@ class FireworksPoeTextBot(PoeBot):
             
             log_fn({
                 "msg": "Error during request processing",
+                "request_id": request_id,
                 "error_type": error_type,
                 "error_category": error_category,
                 "error_details": error_message,
