@@ -632,21 +632,10 @@ class FireworksPoeTextBot(PoeBot):
             error_type = type(e).__name__
             error_message = str(e)
             
-            # Check for specific error patterns in error message
-            if "generate first token before the given deadline" in error_message:
-                error_category = "first_token_timeout"
-            elif "closed connection" in error_message:
-                error_category = "connection_closed"
-            elif "timed out" in error_message.lower():
-                error_category = "request_timeout"
-            else:
-                error_category = "general_error"
-            
             log_fn({
                 "msg": "Error during request processing",
                 "request_id": request_id,
                 "error_type": error_type,
-                "error_category": error_category,
                 "error_details": error_message,
                 "error_traceback": "\n".join(traceback.format_exception(e)),
                 "elapsed_sec": end_t - start_t,
