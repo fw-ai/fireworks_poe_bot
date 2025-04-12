@@ -650,10 +650,6 @@ class FireworksPoeTextBot(PoeBot):
                     "token_count": token_count,
                     "query": copy.copy(query.dict()),
                 })
-                if "prompt is too long" in str(e):
-                    error_type = "user_message_too_long"
-                else:
-                    error_type = None
                 yield ErrorResponse(allow_retry=False, error_type=error_type, text=str(e))
                 return
 
