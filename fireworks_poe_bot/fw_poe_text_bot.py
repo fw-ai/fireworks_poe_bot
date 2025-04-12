@@ -633,25 +633,6 @@ class FireworksPoeTextBot(PoeBot):
                     "query": copy.copy(query.dict()),
                 })
                 raise
-            except InvalidRequestError as e:
-                # Special handling for invalid request errors
-                end_t = time.time()
-                log_fn = self._log_error
-                if self.ignore_prompt_too_long_error and "The prompt is too long" in str(e):
-                    log_fn = self._log_warn
-                    
-                log_fn({
-                    "msg": "Invalid request to Fireworks API",
-                    "request_id": request_id,
-                    "error_type": "invalid_request",
-                    "error_details": str(e),
-                    "elapsed_sec": end_t - start_t,
-                    "first_token_received": first_token_received,
-                    "token_count": token_count,
-                    "query": copy.copy(query.dict()),
-                })
-                yield ErrorResponse(allow_retry=False, error_type=error_type, text=str(e))
-                return
 
             end_t = time.time()
             elapsed_sec = end_t - start_t
