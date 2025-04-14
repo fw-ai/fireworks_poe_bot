@@ -604,10 +604,6 @@ class FireworksPoeTextBot(PoeBot):
                 })
                 
             except (TimeoutError, ConnectionError) as e:
-            
-                error_type = type(e).__name__
-                
-                self._log_error(error_type)
                 raise
 
             end_t = time.time()
