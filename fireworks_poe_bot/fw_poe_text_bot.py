@@ -26,6 +26,7 @@ import time
 import io
 import base64
 import httpx
+import uuid
 from PIL import Image
 import traceback
 
@@ -202,6 +203,13 @@ class FireworksPoeTextBot(PoeBot):
             yield ErrorResponse(allow_retry=False, text="Empty query")
             return
 
+        # Generate a unique request_id to correlate logs and API calls
+        request_id = str(uuid.uuid4())
+
+         # Add token metrics for  diagnostics
+        first_token_received = False
+        token_count = 0
+        
         orig_api_key = fireworks.client.api_key
         fireworks.client.api_key = self.api_key
         num_images = 0
@@ -216,10 +224,10 @@ class FireworksPoeTextBot(PoeBot):
                 # OpenAI/Fireworks use the "assistant" role for the LLM, but Poe uses the
                 # "bot" role. Replace that one. Otherwise, ignore the role
                 if protocol_message.role not in {"system", "user", "bot"}:
-                    self._log_warn({"msg": "Unknown role", **log_msg})
+                    self._log_warn({"msg": "Unknown role", "request_id": request_id, **log_msg})
                     continue
                 if protocol_message.content_type not in {"text/plain", "text/markdown"}:
-                    self._log_warn({"msg": "Unknown content type", **log_msg})
+                    self._log_warn({"msg": "Unknown content type", "request_id": request_id, **log_msg})
                     continue
                 img_buffer = None
                 attachment_parsed_content = None
@@ -294,6 +302,7 @@ class FireworksPoeTextBot(PoeBot):
                                                 "error": "Image provided contains NSFW content",
                                                 "elapsed_sec": end_t - start_t,
                                                 "query": copy.copy(query.dict()),
+                                                "request_id": request_id,
                                             }
                                         )
                                         yield PartialResponse(
@@ -317,6 +326,7 @@ class FireworksPoeTextBot(PoeBot):
                                         ),
                                         "elapsed_sec": end_t - start_t,
                                         "query": copy.copy(query.dict()),
+                                        "request_id": request_id,
                                     }
                                 )
                                 yield ErrorResponse(
@@ -399,7 +409,8 @@ class FireworksPoeTextBot(PoeBot):
                     ):
                         self._log_warn(
                             {
-                                "msg": f"Assistant message {messages[i]} not preceded by user message"
+                                "msg": f"Assistant message {messages[i]} not preceded by user message",
+                                "request_id": request_id,
                             }
                         )
                         messages.insert(i, {"role": "user", "content": ""})
@@ -438,7 +449,7 @@ class FireworksPoeTextBot(PoeBot):
                 # Ensure last message is a user message
                 if messages[-1]["role"] != "user":
                     self._log_warn(
-                        {"msg": f"Last message {messages[-1]} not a user message"}
+                        {"msg": f"Last message {messages[-1]} not a user message", "request_id": request_id}
                     )
                     messages.append({"role": "user", "content": ""})
 
@@ -450,7 +461,8 @@ class FireworksPoeTextBot(PoeBot):
                     ):
                         self._log_warn(
                             {
-                                "msg": f"User message {messages[i]} not followed by assistant message"
+                                "msg": f"User message {messages[i]} not followed by assistant message",
+                                "request_id": request_id,
                             }
                         )
                         messages.insert(i + 1, {"role": "assistant", "content": ""})
@@ -459,6 +471,7 @@ class FireworksPoeTextBot(PoeBot):
             self._log_info(
                 {
                     "msg": "Request received",
+                    "request_id": request_id,
                     **log_query,
                     "processed_msgs": messages,
                 }
@@ -473,48 +486,132 @@ class FireworksPoeTextBot(PoeBot):
             generated_len = 0
             complete_response = ""
             unreplaced_complete_response = ""
-            async for response in self.completion_async_method(
-                model=self.model,
-                messages=messages,
-                stream=True,
-                request_timeout=self.request_timeout or 600,
-                temperature=query.temperature if query.temperature is not None else 0.6,
-                stop=stop_seqs,
-                max_tokens=self.max_tokens,
-                prompt_truncate_len=self.prompt_truncate_len,
-                **additional_args,
-            ):
-                # Step 3: Transform the CompletionStreamResponse into PartialResponse format
-                for choice in response.choices:
-                    assert isinstance(choice, ChatCompletionResponseStreamChoice)
-                    if choice.delta.content is None:
-                        continue
+            
+            # Add timestamps for streaming diagnostics
+            stream_start_time = time.time()
+            last_token_time = stream_start_time
+            
+            self._log_info({
+                "msg": "Starting stream request to Fireworks API",
+                "request_id": request_id,
+                "request_timeout": self.request_timeout,
+                "stream_start_time": stream_start_time,
+                "temperature": query.temperature if query.temperature is not None else 0.6,
+                "max_tokens": self.max_tokens,
+            })
+            
+            try:
+                # Create headers to pass the request_id to the Fireworks API
+                # Properly merge with existing headers if present
+                if "headers" not in additional_args:
+                    additional_args["headers"] = {}
+                
+                # Add request_id to headers, preserving any existing headers
+                additional_args["headers"]["x-request-id"] = request_id
+                
+                # Log the headers we're sending to help with debugging
+                self._log_info({
+                    "msg": "Sending request to Fireworks API with headers",
+                    "request_id": request_id,
+                    "headers": additional_args["headers"],
+                })
+                
+                async for response in self.completion_async_method(
+                    model=self.model,
+                    messages=messages,
+                    stream=True,
+                    request_timeout=self.request_timeout or 600,
+                    temperature=query.temperature if query.temperature is not None else 0.6,
+                    stop=stop_seqs,
+                    max_tokens=self.max_tokens,
+                    prompt_truncate_len=self.prompt_truncate_len,
+                    **additional_args,
+                ):
+                    # Step 3: Transform the CompletionStreamResponse into PartialResponse format
+                    current_time = time.time()
+                    
+                    # Check for long delays between tokens
+                    if token_count > 0 and current_time - last_token_time > 5.0:
+                        self._log_warn({
+                            "msg": "Long delay between tokens",
+                            "request_id": request_id,
+                            "seconds_since_last_token": current_time - last_token_time,
+                            "token_count": token_count,
+                            "fireworks_response_id": response.id,
+                        })
+                    
+                    for choice in response.choices:
+                        assert isinstance(choice, ChatCompletionResponseStreamChoice)
+                        if choice.delta.content is None:
+                            continue
 
-                    if self.replace_think:
-                        unreplaced_complete_response += choice.delta.content
-                        thinking_mode = False
-                        if '<think>' in unreplaced_complete_response:
-                            choice.delta.content = choice.delta.content.replace('<think>', 'Thinking...\n')
-                            thinking_mode = True
-                        if '</think>' in unreplaced_complete_response:
-                            choice.delta.content = choice.delta.content.replace('</think>', '\n')
+                        token_count += 1
+                        
+                        # Log when first token is received
+                        if not first_token_received:
+                            first_token_received = True
+                            first_token_time = current_time
+                            first_token_latency = first_token_time - stream_start_time
+                            self._log_info({
+                                "msg": "First token received",
+                                "request_id": request_id,
+                                "first_token_latency_sec": first_token_latency,
+                                "fireworks_response_id": response.id,
+                            })
+                            
+                            # Alert if first token took too long
+                            if first_token_latency > 10.0:
+                                self._log_warn({
+                                    "msg": "High latency for first token",
+                                    "request_id": request_id,
+                                    "first_token_latency_sec": first_token_latency,
+                                    "fireworks_response_id": response.id,
+                                })
+
+                        if self.replace_think:
+                            unreplaced_complete_response += choice.delta.content
                             thinking_mode = False
-                        if thinking_mode:
-                            choice.delta.content = choice.delta.content.replace('\n', '\n> ')
+                            if '<think>' in unreplaced_complete_response:
+                                choice.delta.content = choice.delta.content.replace('<think>', 'Thinking...\n')
+                                thinking_mode = True
+                            if '</think>' in unreplaced_complete_response:
+                                choice.delta.content = choice.delta.content.replace('</think>', '\n')
+                                thinking_mode = False
+                            if thinking_mode:
+                                choice.delta.content = choice.delta.content.replace('\n', '\n> ')
 
-                    generated_len += len(choice.delta.content)
-                    complete_response += choice.delta.content
-                    yield PartialResponse(
-                        text=choice.delta.content,
-                        raw_response=response,
-                        request_id=response.id,
-                    )
+                        generated_len += len(choice.delta.content)
+                        complete_response += choice.delta.content
+                        
+                        # Update last token time
+                        last_token_time = current_time
+                        
+                        yield PartialResponse(
+                            text=choice.delta.content,
+                            raw_response=response,
+                            request_id=response.id,
+                        )
+                
+                # Log stream performance metrics
+                end_t = time.time()
+                self._log_info({
+                    "msg": "Stream completed successfully",
+                    "request_id": request_id,
+                    "token_count": token_count,
+                    "stream_duration_sec": end_t - stream_start_time,
+                    "tokens_per_second": token_count / (end_t - stream_start_time) if end_t > stream_start_time else 0,
+                    "fireworks_response_id": response.id if 'response' in locals() else None,
+                })
+                
+            except (TimeoutError, ConnectionError) as e:
+                raise
 
             end_t = time.time()
             elapsed_sec = end_t - start_t
             self._log_info(
                 {
                     "msg": "Request completed",
+                    "request_id": request_id,
                     "query": log_query,
                     "response": complete_response,
                     "generated_len": generated_len,
@@ -529,14 +626,23 @@ class FireworksPoeTextBot(PoeBot):
             if self.ignore_prompt_too_long_error and "The prompt is too long" in str(e):
                 log_fn = self._log_warn
 
-            log_fn(
-                {
-                    "msg": "Invalid request",
-                    "error": "\n".join(traceback.format_exception(e)),
-                    "elapsed_sec": end_t - start_t,
-                    "query": copy.copy(query.dict()),
-                }
-            )
+            # Enhanced error reporting with exception type
+            error_type = type(e).__name__
+            error_code = getattr(e, 'status_code', None)
+            error_message = str(e)
+            
+            log_fn({
+                "msg": "Error during request processing",
+                "request_id": request_id,
+                "error_code": error_code,
+                "error_type": error_type,
+                "error_details": error_message,
+                "error_traceback": "\n".join(traceback.format_exception(e)),
+                "elapsed_sec": end_t - start_t,
+                "first_token_received": first_token_received,
+                "token_count": token_count,
+                "query": copy.copy(query.dict()),
+            })
             if "prompt is too long" in str(e):
                 error_type = "user_message_too_long"
             else:
