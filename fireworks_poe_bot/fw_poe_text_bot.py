@@ -501,19 +501,11 @@ class FireworksPoeTextBot(PoeBot):
             })
             
             try:
-                # Create headers to pass the request_id to the Fireworks API
-                # Properly merge with existing headers if present
-                if "headers" not in additional_args:
-                    additional_args["headers"] = {}
                 
-                # Add request_id to headers, preserving any existing headers
-                additional_args["headers"]["x-request-id"] = request_id
-                
-                # Log the headers we're sending to help with debugging
+                # Log the request_id we're sending to help with debugging
                 self._log_info({
-                    "msg": "Sending request to Fireworks API with headers",
+                    "msg": "Sending request to Fireworks API with request_id",
                     "request_id": request_id,
-                    "headers": additional_args["headers"],
                 })
                 
                 async for response in self.completion_async_method(
