@@ -45,6 +45,7 @@ class TextModelConfig(ModelConfig):
     alpaca_instruction_msg: Optional[str] = None
     vlm_input_image_safety_check: Optional[bool] = False
     replace_think: bool = False
+    model_deployment: Optional[str] = None
 
     meta_response: Optional[MetaResponse] = None
 
@@ -70,6 +71,7 @@ class FireworksPoeTextBot(PoeBot):
         alpaca_instruction_msg: Optional[str],
         vlm_input_image_safety_check: Optional[bool],
         replace_think: bool,
+        model_deployment: Optional[str],
         meta_response: Optional[MetaResponse],
         completion_async_method: Callable = ChatCompletion.acreate,
     ):
@@ -90,6 +92,7 @@ class FireworksPoeTextBot(PoeBot):
         self.alpaca_instruction_msg = alpaca_instruction_msg
         self.vlm_input_image_safety_check = vlm_input_image_safety_check
         self.replace_think = replace_think
+        self.model_deployment = model_deployment
         self.system_prompt_override = system_prompt_override
         self.additional_args = additional_args or {}
         if meta_response:
@@ -494,6 +497,8 @@ class FireworksPoeTextBot(PoeBot):
             self._log_info({
                 "msg": "Starting stream request to Fireworks API",
                 "request_id": request_id,
+                "model": self.model,
+                "model_deployment": self.model_deployment,
                 "request_timeout": self.request_timeout,
                 "stream_start_time": stream_start_time,
                 "temperature": query.temperature if query.temperature is not None else 0.6,
@@ -507,9 +512,14 @@ class FireworksPoeTextBot(PoeBot):
                     "msg": "Sending request to Fireworks API with request_id",
                     "request_id": request_id,
                 })
+
+                if self.model_deployment is not None:
+                    model_with_deployment = f"{self.model}#{self.model_deployment}"
+                else:
+                    model_with_deployment = self.model
                 
                 async for response in self.completion_async_method(
-                    model=self.model,
+                    model=model_with_deployment,
                     messages=messages,
                     stream=True,
                     request_timeout=self.request_timeout or 600,
@@ -527,6 +537,8 @@ class FireworksPoeTextBot(PoeBot):
                         self._log_warn({
                             "msg": "Long delay between tokens",
                             "request_id": request_id,
+                            "model": self.model,
+                            "model_deployment": self.model_deployment,
                             "seconds_since_last_token": current_time - last_token_time,
                             "token_count": token_count,
                             "fireworks_response_id": response.id,
@@ -547,6 +559,8 @@ class FireworksPoeTextBot(PoeBot):
                             self._log_info({
                                 "msg": "First token received",
                                 "request_id": request_id,
+                                "model": self.model,
+                                "model_deployment": self.model_deployment,
                                 "first_token_latency_sec": first_token_latency,
                                 "fireworks_response_id": response.id,
                             })
@@ -556,6 +570,8 @@ class FireworksPoeTextBot(PoeBot):
                                 self._log_warn({
                                     "msg": "High latency for first token",
                                     "request_id": request_id,
+                                    "model": self.model,
+                                    "model_deployment": self.model_deployment,
                                     "first_token_latency_sec": first_token_latency,
                                     "fireworks_response_id": response.id,
                                 })
@@ -589,6 +605,8 @@ class FireworksPoeTextBot(PoeBot):
                 self._log_info({
                     "msg": "Stream completed successfully",
                     "request_id": request_id,
+                    "model": self.model,
+                    "model_deployment": self.model_deployment,
                     "token_count": token_count,
                     "stream_duration_sec": end_t - stream_start_time,
                     "tokens_per_second": token_count / (end_t - stream_start_time) if end_t > stream_start_time else 0,
@@ -604,6 +622,8 @@ class FireworksPoeTextBot(PoeBot):
                 {
                     "msg": "Request completed",
                     "request_id": request_id,
+                    "model": self.model,
+                    "model_deployment": self.model_deployment,
                     "query": log_query,
                     "response": complete_response,
                     "generated_len": generated_len,
@@ -626,6 +646,8 @@ class FireworksPoeTextBot(PoeBot):
             log_fn({
                 "msg": "Error during request processing",
                 "request_id": request_id,
+                "model": self.model,
+                "model_deployment": self.model_deployment,
                 "error_code": error_code,
                 "error_type": error_type,
                 "error_details": error_message,
