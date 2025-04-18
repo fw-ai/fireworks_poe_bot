@@ -32,7 +32,6 @@ import traceback
 
 
 class TextModelConfig(ModelConfig):
-    model_deployment: Optional[str] = None
     input_image_size: Optional[int] = None
     prompt_truncate_len: int = 2048
     max_tokens: int = 4096
@@ -46,6 +45,7 @@ class TextModelConfig(ModelConfig):
     alpaca_instruction_msg: Optional[str] = None
     vlm_input_image_safety_check: Optional[bool] = False
     replace_think: bool = False
+    model_deployment: Optional[str] = None
 
     meta_response: Optional[MetaResponse] = None
 
@@ -55,7 +55,6 @@ class FireworksPoeTextBot(PoeBot):
     def __init__(
         self,
         model: str,
-        model_deployment: Optional[str],
         api_key: str,
         environment: str,
         deployment: str,
@@ -72,12 +71,12 @@ class FireworksPoeTextBot(PoeBot):
         alpaca_instruction_msg: Optional[str],
         vlm_input_image_safety_check: Optional[bool],
         replace_think: bool,
+        model_deployment: Optional[str],
         meta_response: Optional[MetaResponse],
         completion_async_method: Callable = ChatCompletion.acreate,
     ):
         super().__init__()
         self.model = model
-        self.model_deployment = model_deployment
         self.api_key = api_key
         self.environment = environment
         self.deployment = deployment
@@ -93,6 +92,7 @@ class FireworksPoeTextBot(PoeBot):
         self.alpaca_instruction_msg = alpaca_instruction_msg
         self.vlm_input_image_safety_check = vlm_input_image_safety_check
         self.replace_think = replace_think
+        self.model_deployment = model_deployment
         self.system_prompt_override = system_prompt_override
         self.additional_args = additional_args or {}
         if meta_response:
