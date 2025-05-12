@@ -252,6 +252,13 @@ class FireworksPoeTextBot(PoeBot):
                         except Exception as e:
                             yield ErrorResponse(allow_retry=False, text=str(e))
                             raise RuntimeError(str(e))
+                    elif self.input_image_size is not None and protocol_message.attachments and len(protocol_message.attachments) > 0:
+                        if protocol_message.attachments[0].parsed_content is not None:
+                            attachment_parsed_content = protocol_message.attachments[
+                                0
+                            ].parsed_content
+                        else:
+                            attachment_parsed_content = None
                     elif protocol_message.attachments and protocol_message.attachments[0].parsed_content is not None:
                         attachment_parsed_content = protocol_message.attachments[
                             0
