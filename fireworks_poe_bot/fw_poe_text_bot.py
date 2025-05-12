@@ -240,7 +240,7 @@ class FireworksPoeTextBot(PoeBot):
                     role = protocol_message.role
                     # NB: using `input_image_size` as a flag to determine whether the
                     # model supports image understanding natively
-                    if self.input_image_size is not None and protocol_message.attachments and protocol_message.attachments[
+                    if self.input_image_size is not None and protocol_message.attachments and len(protocol_message.attachments) > 0 and protocol_message.attachments[
                         0
                     ].content_type in ["image/png", "image/jpeg"]:
                         try:
@@ -252,18 +252,21 @@ class FireworksPoeTextBot(PoeBot):
                         except Exception as e:
                             yield ErrorResponse(allow_retry=False, text=str(e))
                             raise RuntimeError(str(e))
-                    elif self.input_image_size is not None and protocol_message.attachments and len(protocol_message.attachments) > 0:
-                        if protocol_message.attachments[0].parsed_content is not None:
-                            attachment_parsed_content = protocol_message.attachments[
-                                0
-                            ].parsed_content
-                        else:
-                            attachment_parsed_content = None
                     elif protocol_message.attachments and protocol_message.attachments[0].parsed_content is not None:
                         attachment_parsed_content = protocol_message.attachments[
                             0
                         ].parsed_content
                 content = []
+                self._log_info(
+                    {
+                        "msg": "Content Structure",
+                        "request_id": request_id,
+                        "content": content,
+                        "attachment_type": protocol_message.attachments[0].content_type if protocol_message.attachments else "none",
+                        "has_img_buffer": img_buffer is not None,
+                        "num_images": num_images,
+                    }
+                )
                 if attachment_parsed_content is not None:
                     content.append({"type": "text", "text": attachment_parsed_content})
                 if img_buffer:
