@@ -300,7 +300,6 @@ class FireworksPoeTextBot(PoeBot):
                 for message in messages[::-1]:
                     if isinstance(message["content"], list):
 
-
                         has_image_url = (len(message["content"]) > 1 and 
                            isinstance(message["content"][1], dict) and 
                            "image_url" in message["content"][1])
