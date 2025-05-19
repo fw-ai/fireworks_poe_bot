@@ -299,6 +299,15 @@ class FireworksPoeTextBot(PoeBot):
                 last_image_kept = False
                 for message in messages[::-1]:
                     if isinstance(message["content"], list):
+
+
+                        has_image_url = (len(message["content"]) > 1 and 
+                           isinstance(message["content"][1], dict) and 
+                           "image_url" in message["content"][1])
+                        
+                        if not has_image_url:
+                            continue
+                                    
                         # content being a list means it contains an image
                         if last_image_kept:
                             message["content"] = message["content"][0]["text"]
