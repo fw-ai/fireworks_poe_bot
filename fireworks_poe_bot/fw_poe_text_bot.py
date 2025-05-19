@@ -252,7 +252,7 @@ class FireworksPoeTextBot(PoeBot):
                         except Exception as e:
                             yield ErrorResponse(allow_retry=False, text=str(e))
                             raise RuntimeError(str(e))
-                    elif protocol_message.attachments and protocol_message.attachments[0].parsed_content is not None:
+                    elif protocol_message.attachments and len(protocol_message.attachments) > 0 and protocol_message.attachments[0].parsed_content is not None:
                         attachment_parsed_content = protocol_message.attachments[
                             0
                         ].parsed_content
@@ -262,7 +262,7 @@ class FireworksPoeTextBot(PoeBot):
                         "msg": "Content Structure",
                         "request_id": request_id,
                         "content": content,
-                        "attachment_type": protocol_message.attachments[0].content_type if protocol_message.attachments else "none",
+                        "attachment_type": protocol_message.attachments[0].content_type if len(protocol_message.attachments) > 0 else "none",
                         "has_img_buffer": img_buffer is not None,
                         "num_images": num_images,
                     }
