@@ -240,7 +240,7 @@ class FireworksPoeTextBot(PoeBot):
                     role = protocol_message.role
                     # NB: using `input_image_size` as a flag to determine whether the
                     # model supports image understanding natively
-                    if self.input_image_size is not None and protocol_message.attachments and protocol_message.attachments[
+                    if self.input_image_size is not None and protocol_message.attachments and len(protocol_message.attachments) > 0 and protocol_message.attachments[
                         0
                     ].content_type in ["image/png", "image/jpeg"]:
                         try:
@@ -252,11 +252,21 @@ class FireworksPoeTextBot(PoeBot):
                         except Exception as e:
                             yield ErrorResponse(allow_retry=False, text=str(e))
                             raise RuntimeError(str(e))
-                    elif protocol_message.attachments and protocol_message.attachments[0].parsed_content is not None:
+                    elif protocol_message.attachments and len(protocol_message.attachments) > 0 and protocol_message.attachments[0].parsed_content is not None:
                         attachment_parsed_content = protocol_message.attachments[
                             0
                         ].parsed_content
                 content = []
+                self._log_info(
+                    {
+                        "msg": "Content Structure",
+                        "request_id": request_id,
+                        "content": content,
+                        "attachment_type": protocol_message.attachments[0].content_type if len(protocol_message.attachments) > 0 else "none",
+                        "has_img_buffer": img_buffer is not None,
+                        "num_images": num_images,
+                    }
+                )
                 if attachment_parsed_content is not None:
                     content.append({"type": "text", "text": attachment_parsed_content})
                 if img_buffer:
@@ -289,6 +299,14 @@ class FireworksPoeTextBot(PoeBot):
                 last_image_kept = False
                 for message in messages[::-1]:
                     if isinstance(message["content"], list):
+
+                        has_image_url = (len(message["content"]) > 1 and 
+                           isinstance(message["content"][1], dict) and 
+                           "image_url" in message["content"][1])
+                        
+                        if not has_image_url:
+                            continue
+                                    
                         # content being a list means it contains an image
                         if last_image_kept:
                             message["content"] = message["content"][0]["text"]
