@@ -279,9 +279,20 @@ class FireworksPoeImageBot(PoeBot):
             )
             if "prompt is too long" in str(e):
                 error_type = "user_message_too_long"
+                yield ErrorResponse(
+                    allow_retry=False,
+                    error_type=error_type,
+                    raw_response=e,
+                    text="The user message is too long. Please try again with a shorter message."
+                )
             else:
                 error_type = None
-            yield ErrorResponse(allow_retry=False, error_type=error_type, text=str(e))
+                yield ErrorResponse(
+                    allow_retry=False,
+                    error_type=error_type,
+                    raw_response=e,
+                    text="The bot encountered an unexpected error."
+                )
             return
         finally:
             fireworks.client.api_key = orig_api_key
