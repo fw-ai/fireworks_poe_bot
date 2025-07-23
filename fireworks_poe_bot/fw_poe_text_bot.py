@@ -59,7 +59,7 @@ class FireworksPoeTextBot(PoeBot):
 
     UNSUPPORTED_VIDEO_TYPES = [
         "video/mp4", "video/avi", "video/mov", "video/wmv", 
-        "video/flv", "video/webm", "video/mkv", "video/m4v"
+        "video/flv", "video/webm", "video/mkv", "video/m4v", "video/quicktime"
     ]
     def __init__(
         self,
