@@ -247,6 +247,15 @@ class FireworksPoeTextBot(PoeBot):
                     role = "assistant"
                 else:
                     role = protocol_message.role
+                    # DEBUG: Log all message info
+                    self._log_info({
+                        "msg": "DEBUG: Processing message", 
+                        "request_id": request_id,
+                        "role": role,
+                        "has_attachments": bool(protocol_message.attachments),
+                        "attachment_count": len(protocol_message.attachments) if protocol_message.attachments else 0,
+                        "attachment_types": [att.content_type for att in protocol_message.attachments] if protocol_message.attachments else []
+                    })
                     # NB: using `input_image_size` as a flag to determine whether the
                     # model supports image understanding natively
                     if protocol_message.attachments and len(protocol_message.attachments) > 0:
