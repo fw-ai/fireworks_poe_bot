@@ -52,6 +52,15 @@ class TextModelConfig(ModelConfig):
 
 @register_bot_plugin("text_models", TextModelConfig)
 class FireworksPoeTextBot(PoeBot):
+    UNSUPPORTED_AUDIO_TYPES = [
+        "audio/mpeg", "audio/mp3", "audio/wav", "audio/ogg", 
+        "audio/m4a", "audio/aac", "audio/flac", "audio/webm"
+    ]
+
+    UNSUPPORTED_VIDEO_TYPES = [
+        "video/mp4", "video/avi", "video/mov", "video/wmv", 
+        "video/flv", "video/webm", "video/mkv", "video/m4v"
+    ]
     def __init__(
         self,
         model: str,
@@ -240,22 +249,57 @@ class FireworksPoeTextBot(PoeBot):
                     role = protocol_message.role
                     # NB: using `input_image_size` as a flag to determine whether the
                     # model supports image understanding natively
-                    if self.input_image_size is not None and protocol_message.attachments and len(protocol_message.attachments) > 0 and protocol_message.attachments[
-                        0
-                    ].content_type in ["image/png", "image/jpeg"]:
-                        try:
-                            img_buffer = (
-                                await self.download_image_and_save_to_bytes(
-                                    protocol_message.attachments[0].url
-                                )
-                            )
-                        except Exception as e:
-                            yield ErrorResponse(allow_retry=False, text=str(e))
-                            raise RuntimeError(str(e))
-                    elif protocol_message.attachments and len(protocol_message.attachments) > 0 and protocol_message.attachments[0].parsed_content is not None:
-                        attachment_parsed_content = protocol_message.attachments[
-                            0
-                        ].parsed_content
+                    if protocol_message.attachments and len(protocol_message.attachments) > 0:
+                        attachment = protocol_message.attachments[0]
+                        
+                        # Check for unsupported audio files
+                        if attachment.content_type in self.UNSUPPORTED_AUDIO_TYPES:
+                            error_msg = f"Audio files are not supported. The model cannot process {attachment.content_type} files. Please use text input instead."
+                            self._log_warn({
+                                "msg": "Unsupported audio file type",
+                                "request_id": request_id,
+                                "content_type": attachment.content_type,
+                                "attachment_name": getattr(attachment, 'name', 'unknown')
+                            })
+                            yield ErrorResponse(allow_retry=False, text=error_msg)
+                            return
+                        
+                        # Check for unsupported video files
+                        elif attachment.content_type in self.UNSUPPORTED_VIDEO_TYPES:
+                            error_msg = f"Video files are not supported. The model cannot process {attachment.content_type} files. Please use text input or supported image formats (PNG, JPEG) instead."
+                            self._log_warn({
+                                "msg": "Unsupported video file type", 
+                                "request_id": request_id,
+                                "content_type": attachment.content_type,
+                                "attachment_name": getattr(attachment, 'name', 'unknown')
+                            })
+                            yield ErrorResponse(allow_retry=False, text=error_msg)
+                            return
+                        
+                        # Handle supported image files (existing logic)
+                        elif (self.input_image_size is not None and 
+                            attachment.content_type in ["image/png", "image/jpeg"]):
+                            try:
+                                img_buffer = await self.download_image_and_save_to_bytes(attachment.url)
+                            except Exception as e:
+                                yield ErrorResponse(allow_retry=False, text=str(e))
+                                raise RuntimeError(str(e))
+                        
+                        # Handle files with parsed content (existing logic)
+                        elif attachment.parsed_content is not None:
+                            attachment_parsed_content = attachment.parsed_content
+                        
+                        # Handle any other unsupported file types
+                        else:
+                            error_msg = f"Unsupported file type: {attachment.content_type}. This model only supports text input and images (PNG, JPEG)."
+                            self._log_warn({
+                                "msg": "Unsupported file type",
+                                "request_id": request_id, 
+                                "content_type": attachment.content_type,
+                                "attachment_name": getattr(attachment, 'name', 'unknown')
+                            })
+                            yield ErrorResponse(allow_retry=False, text=error_msg)
+                            return
                 content = []
                 self._log_info(
                     {
