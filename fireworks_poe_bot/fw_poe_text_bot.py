@@ -53,13 +53,63 @@ class TextModelConfig(ModelConfig):
 @register_bot_plugin("text_models", TextModelConfig)
 class FireworksPoeTextBot(PoeBot):
     UNSUPPORTED_AUDIO_TYPES = [
-        "audio/mpeg", "audio/mp3", "audio/wav", "audio/ogg", 
-        "audio/m4a", "audio/aac", "audio/flac", "audio/webm"
+        # Standard audio MIME types
+        "audio/mpeg", "audio/mp3", "audio/wav", "audio/wave", "audio/ogg", 
+        "audio/m4a", "audio/aac", "audio/flac", "audio/webm", "audio/opus",
+        "audio/vorbis", "audio/3gpp", "audio/3gpp2", "audio/amr", 
+        "audio/basic", "audio/midi", "audio/x-midi", "audio/mp4",
+        
+        # Extended and legacy audio types
+        "audio/x-mp3", "audio/x-mpeg", "audio/mpeg3", "audio/x-wav", 
+        "audio/x-wave", "audio/vnd.wav", "audio/x-pn-wav", "audio/x-flac",
+        "audio/x-m4a", "audio/x-aac", "audio/x-aiff", "audio/aiff",
+        "audio/x-ms-wma", "audio/x-ms-wmv", "audio/wma", "audio/ac3",
+        "audio/eac3", "audio/x-ac3", "audio/vnd.dolby.heaac.1",
+        "audio/vnd.dolby.heaac.2", "audio/x-caf", "audio/x-gsm",
+        
+        # Application types sometimes used for audio
+        "application/ogg", "application/x-ogg", "application/vnd.ms-asf",
+        "application/x-ms-wmz", "application/x-ms-wmd",
+        
+        # Other variations
+        "audio/x-realaudio", "audio/vnd.rn-realaudio", "audio/x-pn-realaudio",
+        "audio/vnd.wave", "audio/L24", "audio/speex", "audio/x-speex",
+        "audio/silk", "audio/vnd.dece.audio", "audio/vnd.digital-winds",
+        "audio/x-matroska"
     ]
 
     UNSUPPORTED_VIDEO_TYPES = [
-        "video/mp4", "video/avi", "video/mov", "video/wmv", 
-        "video/flv", "video/webm", "video/mkv", "video/m4v", "video/quicktime", "video/x-ms-wmv"
+        # Standard video MIME types
+        "video/mp4", "video/mpeg", "video/avi", "video/mov", "video/wmv",
+        "video/flv", "video/webm", "video/mkv", "video/m4v", "video/quicktime",
+        "video/x-ms-wmv", "video/x-ms-asf", "video/x-msvideo", "video/3gpp",
+        "video/3gpp2", "video/x-flv", "video/x-f4v", "video/mp2t",
+        
+        # Extended video types
+        "video/x-mpeg", "video/x-mpeg2", "video/mpeg2", "video/x-dv",
+        "video/dv", "video/x-matroska", "video/x-ms-wm", "video/x-ms-wmx",
+        "video/x-ms-wvx", "video/vnd.ms-asf", "video/x-la-asf",
+        "video/x-ivf", "video/divx", "video/xvid", "video/x-xvid",
+        
+        # Legacy and proprietary formats
+        "video/vnd.rn-realvideo", "video/x-pn-realvideo", "video/realvideo",
+        "video/x-sgi-movie", "video/x-motion-jpeg", "video/x-mjpeg",
+        "video/mjpeg", "video/x-ms-wmp", "video/x-ogm", "video/ogg",
+        "video/theora", "video/x-theora", "video/vp8", "video/vp9",
+        "video/av1", "video/h264", "video/h265", "video/hevc",
+        
+        # Application types sometimes used for video
+        "application/x-troff-msvideo", "application/x-mplayer2",
+        "application/vnd.ms-asf", "application/x-ms-wmz",
+        "application/x-ms-wmd", "application/x-shockwave-flash",
+        "application/x-director", "application/vnd.rn-realmedia",
+        "application/vnd.rn-realmedia-vbr",
+        
+        # Container and mobile formats
+        "video/3gp", "video/3g2", "video/x-3gp", "video/x-3g2",
+        "video/vnd.mpegurl", "video/x-mpegurl", "video/x-matroska-3d",
+        "video/vnd.sealed.mpeg1", "video/vnd.sealed.mpeg4",
+        "video/x-rad-screenplay", "video/x-smv", "video/x-ms-vob"
     ]
     def __init__(
         self,
