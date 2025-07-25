@@ -357,28 +357,6 @@ class FireworksPoeTextBot(PoeBot):
                         elif attachment.parsed_content is not None:
                             attachment_parsed_content = attachment.parsed_content
                         
-                        # Handle any other unsupported file types
-                        else:
-                            # DEBUG
-                            self._log_info({
-                                "msg": "DEBUG: About to trigger unsupported file type error",
-                                "request_id": request_id,
-                                "content_type": attachment.content_type,
-                                "attachment_name": getattr(attachment, 'name', 'unknown'),
-                                "input_image_size": self.input_image_size,
-                                "condition_that_triggered_this": f"else clause - parsed_content is None: {attachment.parsed_content is None}",
-                                "parsed_content_exists": attachment.parsed_content is not None,
-                                "parsed_content_preview": str(attachment.parsed_content)[:200] if attachment.parsed_content else None
-                            })
-                            error_msg = f"Unsupported file type: {attachment.content_type}. This model only supports text input and images (PNG, JPEG)."
-                            self._log_warn({
-                                "msg": "Unsupported file type",
-                                "request_id": request_id, 
-                                "content_type": attachment.content_type,
-                                "attachment_name": getattr(attachment, 'name', 'unknown')
-                            })
-                            yield ErrorResponse(allow_retry=False, text=error_msg)
-                            return
                 content = []
                 self._log_info(
                     {
