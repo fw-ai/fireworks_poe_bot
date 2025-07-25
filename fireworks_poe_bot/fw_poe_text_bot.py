@@ -359,6 +359,15 @@ class FireworksPoeTextBot(PoeBot):
                         
                         # Handle any other unsupported file types
                         else:
+                            # DEBUG
+                            self._log_info({
+                                "msg": "DEBUG: About to trigger unsupported file type error",
+                                "request_id": request_id,
+                                "content_type": attachment.content_type,
+                                "attachment_name": getattr(attachment, 'name', 'unknown'),
+                                "input_image_size": self.input_image_size,
+                                "condition_that_triggered_this": "ADD_THE_ACTUAL_CONDITION_HERE"  # Replace with the actual if condition
+                            })
                             error_msg = f"Unsupported file type: {attachment.content_type}. This model only supports text input and images (PNG, JPEG)."
                             self._log_warn({
                                 "msg": "Unsupported file type",
