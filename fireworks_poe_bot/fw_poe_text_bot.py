@@ -316,7 +316,7 @@ class FireworksPoeTextBot(PoeBot):
                             "request_id": request_id,
                             "content_type": attachment.content_type,
                             "input_image_size": self.input_image_size,
-                            "input_image_size_type": type(self.input_image_size),
+                            "input_image_size_type": str(type(self.input_image_size)),  # <-- Convert to string
                             "supported_check": attachment.content_type in ["image/png", "image/jpeg"],
                             "full_condition": (self.input_image_size is not None and attachment.content_type in ["image/png", "image/jpeg"])
                         })
