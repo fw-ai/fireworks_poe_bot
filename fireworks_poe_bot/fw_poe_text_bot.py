@@ -297,29 +297,11 @@ class FireworksPoeTextBot(PoeBot):
                     role = "assistant"
                 else:
                     role = protocol_message.role
-                    # DEBUG: Log all message info
-                    self._log_info({
-                        "msg": "DEBUG: Processing message", 
-                        "request_id": request_id,
-                        "role": role,
-                        "has_attachments": bool(protocol_message.attachments),
-                        "attachment_count": len(protocol_message.attachments) if protocol_message.attachments else 0,
-                        "attachment_types": [att.content_type for att in protocol_message.attachments] if protocol_message.attachments else []
-                    })
                     # NB: using `input_image_size` as a flag to determine whether the
                     # model supports image understanding natively
                     if protocol_message.attachments and len(protocol_message.attachments) > 0:
                         attachment = protocol_message.attachments[0]
-                        # DEBUG: Log attachment analysis details
-                        self._log_info({
-                            "msg": "DEBUG: Attachment analysis",
-                            "request_id": request_id,
-                            "content_type": attachment.content_type,
-                            "input_image_size": self.input_image_size,
-                            "input_image_size_type": str(type(self.input_image_size)),  # <-- Convert to string
-                            "supported_check": attachment.content_type in ["image/png", "image/jpeg"],
-                            "full_condition": (self.input_image_size is not None and attachment.content_type in ["image/png", "image/jpeg"])
-                        })
+                        
                         # Check for unsupported audio files
                         if attachment.content_type in self.UNSUPPORTED_AUDIO_TYPES:
                             error_msg = f"Audio files are not supported. The model cannot process {attachment.content_type} files. Please use text input instead."
