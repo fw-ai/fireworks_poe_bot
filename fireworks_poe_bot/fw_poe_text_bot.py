@@ -52,6 +52,65 @@ class TextModelConfig(ModelConfig):
 
 @register_bot_plugin("text_models", TextModelConfig)
 class FireworksPoeTextBot(PoeBot):
+    UNSUPPORTED_AUDIO_TYPES = [
+        # Standard audio MIME types
+        "audio/mpeg", "audio/mp3", "audio/wav", "audio/wave", "audio/ogg", 
+        "audio/m4a", "audio/aac", "audio/flac", "audio/webm", "audio/opus",
+        "audio/vorbis", "audio/3gpp", "audio/3gpp2", "audio/amr", 
+        "audio/basic", "audio/midi", "audio/x-midi", "audio/mp4",
+        
+        # Extended and legacy audio types
+        "audio/x-mp3", "audio/x-mpeg", "audio/mpeg3", "audio/x-wav", 
+        "audio/x-wave", "audio/vnd.wav", "audio/x-pn-wav", "audio/x-flac",
+        "audio/x-m4a", "audio/x-aac", "audio/x-aiff", "audio/aiff",
+        "audio/x-ms-wma", "audio/x-ms-wmv", "audio/wma", "audio/ac3",
+        "audio/eac3", "audio/x-ac3", "audio/vnd.dolby.heaac.1",
+        "audio/vnd.dolby.heaac.2", "audio/x-caf", "audio/x-gsm",
+        
+        # Application types sometimes used for audio
+        "application/ogg", "application/x-ogg", "application/vnd.ms-asf",
+        "application/x-ms-wmz", "application/x-ms-wmd",
+        
+        # Other variations
+        "audio/x-realaudio", "audio/vnd.rn-realaudio", "audio/x-pn-realaudio",
+        "audio/vnd.wave", "audio/L24", "audio/speex", "audio/x-speex",
+        "audio/silk", "audio/vnd.dece.audio", "audio/vnd.digital-winds",
+        "audio/x-matroska"
+    ]
+
+    UNSUPPORTED_VIDEO_TYPES = [
+        # Standard video MIME types
+        "video/mp4", "video/mpeg", "video/avi", "video/mov", "video/wmv",
+        "video/flv", "video/webm", "video/mkv", "video/m4v", "video/quicktime",
+        "video/x-ms-wmv", "video/x-ms-asf", "video/x-msvideo", "video/3gpp",
+        "video/3gpp2", "video/x-flv", "video/x-f4v", "video/mp2t",
+        
+        # Extended video types
+        "video/x-mpeg", "video/x-mpeg2", "video/mpeg2", "video/x-dv",
+        "video/dv", "video/x-matroska", "video/x-ms-wm", "video/x-ms-wmx",
+        "video/x-ms-wvx", "video/vnd.ms-asf", "video/x-la-asf",
+        "video/x-ivf", "video/divx", "video/xvid", "video/x-xvid",
+        
+        # Legacy and proprietary formats
+        "video/vnd.rn-realvideo", "video/x-pn-realvideo", "video/realvideo",
+        "video/x-sgi-movie", "video/x-motion-jpeg", "video/x-mjpeg",
+        "video/mjpeg", "video/x-ms-wmp", "video/x-ogm", "video/ogg",
+        "video/theora", "video/x-theora", "video/vp8", "video/vp9",
+        "video/av1", "video/h264", "video/h265", "video/hevc",
+        
+        # Application types sometimes used for video
+        "application/x-troff-msvideo", "application/x-mplayer2",
+        "application/vnd.ms-asf", "application/x-ms-wmz",
+        "application/x-ms-wmd", "application/x-shockwave-flash",
+        "application/x-director", "application/vnd.rn-realmedia",
+        "application/vnd.rn-realmedia-vbr",
+        
+        # Container and mobile formats
+        "video/3gp", "video/3g2", "video/x-3gp", "video/x-3g2",
+        "video/vnd.mpegurl", "video/x-mpegurl", "video/x-matroska-3d",
+        "video/vnd.sealed.mpeg1", "video/vnd.sealed.mpeg4",
+        "video/x-rad-screenplay", "video/x-smv", "video/x-ms-vob"
+    ]
     def __init__(
         self,
         model: str,
@@ -240,22 +299,46 @@ class FireworksPoeTextBot(PoeBot):
                     role = protocol_message.role
                     # NB: using `input_image_size` as a flag to determine whether the
                     # model supports image understanding natively
-                    if self.input_image_size is not None and protocol_message.attachments and len(protocol_message.attachments) > 0 and protocol_message.attachments[
-                        0
-                    ].content_type in ["image/png", "image/jpeg"]:
-                        try:
-                            img_buffer = (
-                                await self.download_image_and_save_to_bytes(
-                                    protocol_message.attachments[0].url
-                                )
-                            )
-                        except Exception as e:
-                            yield ErrorResponse(allow_retry=False, text=str(e))
-                            raise RuntimeError(str(e))
-                    elif protocol_message.attachments and len(protocol_message.attachments) > 0 and protocol_message.attachments[0].parsed_content is not None:
-                        attachment_parsed_content = protocol_message.attachments[
-                            0
-                        ].parsed_content
+                    if protocol_message.attachments and len(protocol_message.attachments) > 0:
+                        attachment = protocol_message.attachments[0]
+                        
+                        # Check for unsupported audio files
+                        if attachment.content_type in self.UNSUPPORTED_AUDIO_TYPES:
+                            error_msg = f"Audio files are not supported. The model cannot process {attachment.content_type} files. Please use text input instead."
+                            self._log_warn({
+                                "msg": "Unsupported audio file type",
+                                "request_id": request_id,
+                                "content_type": attachment.content_type,
+                                "attachment_name": getattr(attachment, 'name', 'unknown')
+                            })
+                            yield ErrorResponse(allow_retry=False, text=error_msg)
+                            return
+                        
+                        # Check for unsupported video files
+                        elif attachment.content_type in self.UNSUPPORTED_VIDEO_TYPES:
+                            error_msg = f"Video files are not supported. The model cannot process {attachment.content_type} files. Please use text input or supported image formats (PNG, JPEG) instead."
+                            self._log_warn({
+                                "msg": "Unsupported video file type", 
+                                "request_id": request_id,
+                                "content_type": attachment.content_type,
+                                "attachment_name": getattr(attachment, 'name', 'unknown')
+                            })
+                            yield ErrorResponse(allow_retry=False, text=error_msg)
+                            return
+                        
+                        # Handle supported image files (existing logic)
+                        elif (self.input_image_size is not None and 
+                            attachment.content_type in ["image/png", "image/jpeg"]):
+                            try:
+                                img_buffer = await self.download_image_and_save_to_bytes(attachment.url)
+                            except Exception as e:
+                                yield ErrorResponse(allow_retry=False, text=str(e))
+                                raise RuntimeError(str(e))
+                        
+                        # Handle files with parsed content (existing logic)
+                        elif attachment.parsed_content is not None:
+                            attachment_parsed_content = attachment.parsed_content
+                        
                 content = []
                 self._log_info(
                     {
