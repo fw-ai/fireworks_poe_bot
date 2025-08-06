@@ -618,6 +618,16 @@ class FireworksPoeTextBot(PoeBot):
                             choice.delta.reasoning_content):
                             
                             reasoning_delta = choice.delta.reasoning_content
+
+                            # DEBUGGING
+                            self._log_info({
+                                "msg": "DEBUG: Reasoning delta details",
+                                "request_id": request_id,
+                                "reasoning_content_started": reasoning_content_started,
+                                "reasoning_delta": reasoning_delta,
+                                "has_regular_content": choice.delta.content is not None,
+                                "regular_content": choice.delta.content,
+                            })
                             
                             # First reasoning chunk - output header once
                             if not reasoning_content_started:
@@ -644,6 +654,14 @@ class FireworksPoeTextBot(PoeBot):
                         # Handle regular content
                         if choice.delta.content is None:
                             continue
+
+                        # DEBUGGING: Log the transition
+                        self._log_info({
+                            "msg": "DEBUG: About to process regular content",
+                            "request_id": request_id,
+                            "reasoning_content_started": reasoning_content_started,
+                            "content": choice.delta.content,
+                        })
 
                         # Transition from reasoning to regular content (only when we have actual content)
                         if reasoning_content_started:
