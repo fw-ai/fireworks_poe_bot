@@ -623,25 +623,19 @@ class FireworksPoeTextBot(PoeBot):
                             if not reasoning_content_started:
                                 reasoning_content_started = True
                                 yield PartialResponse(
-                                    text="Thinking...\n",
+                                    text="Thinking...\n> ",
                                     raw_response=response,
                                     request_id=response.id,
                                 )
                             
-                            # Format reasoning delta with > prefix
-                            formatted_delta = ""
-                            for line in reasoning_delta.split('\n'):
-                                if line.strip():
-                                    formatted_delta += f"> {line}\n"
-                                elif reasoning_delta.endswith('\n'):
-                                    formatted_delta += "\n"
+                            # Stream the raw reasoning content, replacing newlines with "\n> "
+                            formatted_delta = reasoning_delta.replace('\n', '\n> ')
                             
-                            if formatted_delta:
-                                yield PartialResponse(
-                                    text=formatted_delta,
-                                    raw_response=response,
-                                    request_id=response.id,
-                                )
+                            yield PartialResponse(
+                                text=formatted_delta,
+                                raw_response=response,
+                                request_id=response.id,
+                            )
                             
                             continue
 
