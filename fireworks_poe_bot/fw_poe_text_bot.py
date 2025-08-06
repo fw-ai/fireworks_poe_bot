@@ -45,6 +45,7 @@ class TextModelConfig(ModelConfig):
     alpaca_instruction_msg: Optional[str] = None
     vlm_input_image_safety_check: Optional[bool] = False
     replace_think: bool = False
+    show_reasoning_content: bool = False
     model_deployment: Optional[str] = None
 
     meta_response: Optional[MetaResponse] = None
@@ -71,6 +72,7 @@ class FireworksPoeTextBot(PoeBot):
         alpaca_instruction_msg: Optional[str],
         vlm_input_image_safety_check: Optional[bool],
         replace_think: bool,
+        show_reasoning_content: bool,
         model_deployment: Optional[str],
         meta_response: Optional[MetaResponse],
         completion_async_method: Callable = ChatCompletion.acreate,
@@ -92,6 +94,7 @@ class FireworksPoeTextBot(PoeBot):
         self.alpaca_instruction_msg = alpaca_instruction_msg
         self.vlm_input_image_safety_check = vlm_input_image_safety_check
         self.replace_think = replace_think
+        self.show_reasoning_content = show_reasoning_content
         self.model_deployment = model_deployment
         self.system_prompt_override = system_prompt_override
         self.additional_args = additional_args or {}
