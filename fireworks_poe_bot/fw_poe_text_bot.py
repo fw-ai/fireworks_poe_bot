@@ -139,6 +139,25 @@ class FireworksPoeTextBot(PoeBot):
         )
         log_error(payload)
 
+    def _format_reasoning_content(self, reasoning_content: str) -> str:
+        """Format reasoning content in the same style as the old <think> tags"""
+        if not reasoning_content:
+            return ""
+        
+        # Format like the old thinking display
+        formatted_lines = []
+        formatted_lines.append("Thinking...\n")
+        
+        # Add indentation to each line of reasoning content
+        for line in reasoning_content.split('\n'):
+            if line.strip():  # Don't indent empty lines
+                formatted_lines.append(f"> {line}\n")
+            else:
+                formatted_lines.append("\n")
+        
+        formatted_lines.append("\n")  # Add spacing after thinking content
+        return "".join(formatted_lines)
+
     async def _image_has_nsfw_content(self, image_binary: bytes) -> bool:
         files = {
             "image": image_binary,
@@ -564,6 +583,46 @@ class FireworksPoeTextBot(PoeBot):
                     
                     for choice in response.choices:
                         assert isinstance(choice, ChatCompletionResponseStreamChoice)
+
+                        if (self.show_reasoning_content and 
+                            hasattr(choice, 'message') and 
+                            hasattr(choice.message, 'reasoning_content') and 
+                            choice.message.reasoning_content):
+                            reasoning_content = choice.message.reasoning_content
+                            formatted_reasoning = self._format_reasoning_content(reasoning_content)
+                            
+                            if formatted_reasoning:
+                                self._log_info({
+                                    "msg": "Reasoning content found",
+                                    "request_id": request_id,
+                                    "model": self.model,
+                                    "reasoning_length": len(reasoning_content),
+                                })
+                                
+                                yield PartialResponse(
+                                    text=formatted_reasoning,
+                                    raw_response=response,
+                                    request_id=response.id,
+                                )
+                        
+                        # Handle reasoning content in delta for streaming responses
+                        if (self.show_reasoning_content and 
+                            hasattr(choice, 'delta') and 
+                            hasattr(choice.delta, 'reasoning_content') and 
+                            choice.delta.reasoning_content):
+                            reasoning_content = choice.delta.reasoning_content
+                            formatted_reasoning = self._format_reasoning_content(reasoning_content)
+                            
+                            if formatted_reasoning:
+                                yield PartialResponse(
+                                    text=formatted_reasoning,
+                                    raw_response=response,
+                                    request_id=response.id,
+                                )
+                        
+
+
+
                         if choice.delta.content is None:
                             continue
 
