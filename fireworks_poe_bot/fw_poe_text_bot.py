@@ -557,6 +557,9 @@ class FireworksPoeTextBot(PoeBot):
                     model_with_deployment = f"{self.model}#{self.model_deployment}"
                 else:
                     model_with_deployment = self.model
+
+                accumulated_reasoning_content = ""
+                reasoning_content_started = False
                 
                 async for response in self.completion_async_method(
                     model=model_with_deployment,
@@ -608,23 +611,48 @@ class FireworksPoeTextBot(PoeBot):
                                     request_id=response.id,
                                 )
                         
-                        # Handle reasoning content in delta for streaming responses
+                        # Handle streaming reasoning content
                         if (self.show_reasoning_content and 
                             hasattr(choice, 'delta') and 
                             hasattr(choice.delta, 'reasoning_content') and 
                             choice.delta.reasoning_content):
-                            reasoning_content = choice.delta.reasoning_content
-                            formatted_reasoning = self._format_reasoning_content(reasoning_content)
                             
-                            if formatted_reasoning:
+                            reasoning_delta = choice.delta.reasoning_content
+                            
+                            # First reasoning chunk - output header once
+                            if not reasoning_content_started:
+                                reasoning_content_started = True
                                 yield PartialResponse(
-                                    text=formatted_reasoning,
+                                    text="Thinking...\n",
                                     raw_response=response,
                                     request_id=response.id,
                                 )
-                        
+                            
+                            # Format reasoning delta with > prefix
+                            formatted_delta = ""
+                            for line in reasoning_delta.split('\n'):
+                                if line.strip():
+                                    formatted_delta += f"> {line}\n"
+                                elif reasoning_delta.endswith('\n'):
+                                    formatted_delta += "\n"
+                            
+                            if formatted_delta:
+                                yield PartialResponse(
+                                    text=formatted_delta,
+                                    raw_response=response,
+                                    request_id=response.id,
+                                )
+                            
+                            continue
 
-
+                        # Transition from reasoning to regular content
+                        if reasoning_content_started and choice.delta.content is not None:
+                            yield PartialResponse(
+                                text="\n",  # Spacing after reasoning
+                                raw_response=response,
+                                request_id=response.id,
+                            )
+                            reasoning_content_started = False
 
                         if choice.delta.content is None:
                             continue
