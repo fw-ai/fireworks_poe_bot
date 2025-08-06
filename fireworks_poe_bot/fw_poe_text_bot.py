@@ -636,20 +636,23 @@ class FireworksPoeTextBot(PoeBot):
                                 raw_response=response,
                                 request_id=response.id,
                             )
-                            
+
+                            # If this delta only has reasoning content, skip to next delta
+                            if choice.delta.content is None:
+                                continue
+
+                        # Handle regular content
+                        if choice.delta.content is None:
                             continue
 
-                        # Transition from reasoning to regular content
-                        if reasoning_content_started and choice.delta.content is not None:
+                        # Transition from reasoning to regular content (only when we have actual content)
+                        if reasoning_content_started:
                             yield PartialResponse(
-                                text="\n",  # Spacing after reasoning
+                                text="\n\n",  # Double spacing after reasoning
                                 raw_response=response,
                                 request_id=response.id,
                             )
                             reasoning_content_started = False
-
-                        if choice.delta.content is None:
-                            continue
 
                         token_count += 1
                         
