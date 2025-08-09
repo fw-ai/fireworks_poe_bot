@@ -45,7 +45,6 @@ class TextModelConfig(ModelConfig):
     alpaca_instruction_msg: Optional[str] = None
     vlm_input_image_safety_check: Optional[bool] = False
     replace_think: bool = False
-    show_reasoning_content: bool = False
     model_deployment: Optional[str] = None
 
     meta_response: Optional[MetaResponse] = None
@@ -131,7 +130,6 @@ class FireworksPoeTextBot(PoeBot):
         alpaca_instruction_msg: Optional[str],
         vlm_input_image_safety_check: Optional[bool],
         replace_think: bool,
-        show_reasoning_content: bool,
         model_deployment: Optional[str],
         meta_response: Optional[MetaResponse],
         completion_async_method: Callable = ChatCompletion.acreate,
@@ -153,7 +151,6 @@ class FireworksPoeTextBot(PoeBot):
         self.alpaca_instruction_msg = alpaca_instruction_msg
         self.vlm_input_image_safety_check = vlm_input_image_safety_check
         self.replace_think = replace_think
-        self.show_reasoning_content = show_reasoning_content
         self.model_deployment = model_deployment
         self.system_prompt_override = system_prompt_override
         self.additional_args = additional_args or {}
@@ -200,25 +197,6 @@ class FireworksPoeTextBot(PoeBot):
             }
         )
         log_error(payload)
-
-    def _format_reasoning_content(self, reasoning_content: str) -> str:
-        """Format reasoning content in the same style as the old <think> tags"""
-        if not reasoning_content:
-            return ""
-        
-        # Format like the old thinking display
-        formatted_lines = []
-        formatted_lines.append("Thinking...\n")
-        
-        # Add indentation to each line of reasoning content
-        for line in reasoning_content.split('\n'):
-            if line.strip():  # Don't indent empty lines
-                formatted_lines.append(f"> {line}\n")
-            else:
-                formatted_lines.append("\n")
-        
-        formatted_lines.append("\n")  # Add spacing after thinking content
-        return "".join(formatted_lines)
 
     async def _image_has_nsfw_content(self, image_binary: bytes) -> bool:
         files = {
@@ -640,9 +618,6 @@ class FireworksPoeTextBot(PoeBot):
                     model_with_deployment = f"{self.model}#{self.model_deployment}"
                 else:
                     model_with_deployment = self.model
-
-                accumulated_reasoning_content = ""
-                reasoning_content_started = False
                 
                 async for response in self.completion_async_method(
                     model=model_with_deployment,
@@ -672,88 +647,8 @@ class FireworksPoeTextBot(PoeBot):
                     
                     for choice in response.choices:
                         assert isinstance(choice, ChatCompletionResponseStreamChoice)
-
-                        if (self.show_reasoning_content and 
-                            hasattr(choice, 'message') and 
-                            hasattr(choice.message, 'reasoning_content') and 
-                            choice.message.reasoning_content):
-                            reasoning_content = choice.message.reasoning_content
-                            formatted_reasoning = self._format_reasoning_content(reasoning_content)
-                            
-                            if formatted_reasoning:
-                                self._log_info({
-                                    "msg": "Reasoning content found",
-                                    "request_id": request_id,
-                                    "model": self.model,
-                                    "reasoning_length": len(reasoning_content),
-                                })
-                                
-                                yield PartialResponse(
-                                    text=formatted_reasoning,
-                                    raw_response=response,
-                                    request_id=response.id,
-                                )
-                        
-                        # Handle streaming reasoning content
-                        if (self.show_reasoning_content and 
-                            hasattr(choice, 'delta') and 
-                            hasattr(choice.delta, 'reasoning_content') and 
-                            choice.delta.reasoning_content):
-                            
-                            reasoning_delta = choice.delta.reasoning_content
-
-                            # DEBUGGING
-                            self._log_info({
-                                "msg": "DEBUG: Reasoning delta details",
-                                "request_id": request_id,
-                                "reasoning_content_started": reasoning_content_started,
-                                "reasoning_delta": reasoning_delta,
-                                "has_regular_content": choice.delta.content is not None,
-                                "regular_content": choice.delta.content,
-                            })
-                            
-                            # First reasoning chunk - output header once
-                            if not reasoning_content_started:
-                                reasoning_content_started = True
-                                yield PartialResponse(
-                                    text="Thinking...\n> ",
-                                    raw_response=response,
-                                    request_id=response.id,
-                                )
-                            
-                            # Stream the raw reasoning content, replacing newlines with "\n> "
-                            formatted_delta = reasoning_delta.replace('\n', '\n> ')
-                            
-                            yield PartialResponse(
-                                text=formatted_delta,
-                                raw_response=response,
-                                request_id=response.id,
-                            )
-
-                            # If this delta only has reasoning content, skip to next delta
-                            if choice.delta.content is None:
-                                continue
-
-                        # Handle regular content
                         if choice.delta.content is None:
                             continue
-
-                        # DEBUGGING: Log the transition
-                        self._log_info({
-                            "msg": "DEBUG: About to process regular content",
-                            "request_id": request_id,
-                            "reasoning_content_started": reasoning_content_started,
-                            "content": choice.delta.content,
-                        })
-
-                        # Transition from reasoning to regular content (only when we have actual content)
-                        if reasoning_content_started:
-                            yield PartialResponse(
-                                text="\n\n",  # Double spacing after reasoning
-                                raw_response=response,
-                                request_id=response.id,
-                            )
-                            reasoning_content_started = False
 
                         token_count += 1
                         
